@@ -158,7 +158,8 @@ class FeaturedPage extends StatelessWidget {
           mainAxisSpacing: MsSizes.tileGap,
           crossAxisSpacing: MsSizes.tileGap,
         ),
-        itemCount: more.length,
+        // One quiet row under the tiles, as in the design.
+        itemCount: more.length.clamp(0, 3),
         itemBuilder: (context, i) {
           final t = more[i];
           return MetroTile(

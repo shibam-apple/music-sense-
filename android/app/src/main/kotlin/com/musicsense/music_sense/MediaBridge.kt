@@ -17,6 +17,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Size
+import android.webkit.CookieManager
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -58,6 +59,16 @@ class MediaBridge(
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "requestAudioPermission" -> requestAudioPermission(result)
+            // The sign-in WebView shares Android's cookie store; this reads
+            // every cookie for the URL, including HttpOnly session cookies
+            // that page JavaScript cannot see.
+            "getCookies" -> result.success(
+                CookieManager.getInstance().getCookie(call.argument<String>("url")!!)
+            )
+            "clearCookies" -> CookieManager.getInstance().removeAllCookies { cleared ->
+                CookieManager.getInstance().flush()
+                result.success(cleared)
+            }
             "queryAudio" -> background(result) { queryAudio() }
             "artwork" -> background(result) {
                 artwork(call.argument<Number>("id")!!.toLong(), call.argument<Int>("size") ?: 512)

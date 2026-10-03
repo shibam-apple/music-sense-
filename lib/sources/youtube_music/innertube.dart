@@ -10,7 +10,11 @@ class InnerTubeClient {
     http.Client? client,
     this.language = 'en',
     this.region = 'US',
+    this.auth,
   }) : _http = client ?? http.Client();
+
+  /// Signed-in headers (cookies + SAPISIDHASH), when the user signed in.
+  final Map<String, String> Function()? auth;
 
   final http.Client _http;
   final String language;
@@ -46,6 +50,7 @@ class InnerTubeClient {
             '(KHTML, like Gecko) Chrome/129.0 Safari/537.36',
         'X-YouTube-Client-Name': '67',
         'X-YouTube-Client-Version': _clientVersion,
+        ...?auth?.call(),
       },
       body: jsonEncode({'context': _context, ...body}),
     );
@@ -68,6 +73,14 @@ class InnerTubeClient {
 
   Future<Map<String, dynamic>> charts() =>
       call('browse', {'browseId': 'FEmusic_charts'});
+
+  /// The signed-in user's liked songs.
+  Future<Map<String, dynamic>> likedSongs() =>
+      call('browse', {'browseId': 'FEmusic_liked_videos'});
+
+  /// The account menu: name, handle and photo of the signed-in user.
+  Future<Map<String, dynamic>> accountMenu() =>
+      call('account/account_menu', {});
 
   /// A playlist or album page by its browse id (e.g. `VL…`).
   Future<Map<String, dynamic>> browse(String browseId) =>
@@ -170,6 +183,21 @@ abstract final class InnerTubeParser {
       }
     });
     return out;
+  }
+
+  /// Name, handle and photo from an account menu response.
+  static ({String? name, String? handle, String? photo}) profile(Object? json) {
+    String? name, handle, photo;
+    _walk(json, (key, node) {
+      if (key != 'activeAccountHeaderRenderer') return;
+      name ??= _text(node['accountName']);
+      handle ??= _text(node['channelHandle']) ?? _text(node['email']);
+      final thumbs = _path(node, ['accountPhoto', 'thumbnails']);
+      if (thumbs is List && thumbs.isNotEmpty) {
+        photo ??= (thumbs.last as Map)['url'] as String?;
+      }
+    });
+    return (name: name, handle: handle, photo: photo);
   }
 
   /// Playlist links with their titles, in order.

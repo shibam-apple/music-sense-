@@ -24,6 +24,13 @@ class LibraryController extends ChangeNotifier {
   List<Track> _tracks = DemoSource.tracks;
   List<(String, List<Track>)> _shelves = const [];
   List<Track> _charts = const [];
+  List<Track> _liked = const [];
+
+  /// Liked songs from a signed-in YouTube Music account.
+  List<Track> get liked => _liked;
+
+  /// Songs stored on the phone.
+  int get localCount => _tracks.where((t) => t.source == 'local').length;
   bool _demo = true;
   bool _loading = false;
 
@@ -35,6 +42,13 @@ class LibraryController extends ChangeNotifier {
   List<(String, List<Track>)> get shelves => _shelves;
   List<Track> get charts => _charts;
 
+  YouTubeMusicSource? get youtube {
+    for (final s in sources) {
+      if (s is YouTubeMusicSource) return s;
+    }
+    return null;
+  }
+
   Future<void> load() async {
     _loading = true;
     notifyListeners();
@@ -43,6 +57,8 @@ class LibraryController extends ChangeNotifier {
       try {
         if (!await source.open()) continue;
         if (source is YouTubeMusicSource) {
+          _liked = await source.likedSongs();
+          found.addAll(_liked);
           _shelves = await source.home();
           found.addAll([for (final (_, songs) in _shelves) ...songs]);
           _charts = await source.charts();

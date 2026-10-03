@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import '../../library/models.dart';
 import '../music_source.dart';
+import 'account.dart';
 import 'innertube.dart';
 
 /// Whether this build includes YouTube Music. The Play Store build passes
@@ -14,9 +16,24 @@ const kYouTubeMusicEnabled = bool.fromEnvironment(
 /// YouTube Music through its unofficial API. Optional and off the Play
 /// Store build: it relies on YouTube internals that change without notice.
 class YouTubeMusicSource extends MusicSource {
-  YouTubeMusicSource({InnerTubeClient? client, YoutubeExplode? explode})
-    : _api = client ?? InnerTubeClient(),
-      _yt = explode ?? YoutubeExplode();
+  YouTubeMusicSource({
+    this.account,
+    InnerTubeClient? client,
+    YoutubeExplode? explode,
+  }) : _api = client ?? InnerTubeClient(auth: account?.headers),
+       _yt =
+           explode ??
+           YoutubeExplode(
+             httpClient: account == null
+                 ? null
+                 : YoutubeHttpClient(SignedInClient(account)),
+           );
+
+  /// The user's sign-in, if any: personal home, liked songs, and streams
+  /// that YouTube only serves to signed-in users.
+  final YouTubeAccount? account;
+
+  bool get signedIn => account?.signedIn ?? false;
 
   final InnerTubeClient _api;
   final YoutubeExplode _yt;
@@ -63,12 +80,30 @@ class YouTubeMusicSource extends MusicSource {
   Future<List<Track>> playlist(String browseId) async =>
       InnerTubeParser.songs(await _api.browse(browseId)).map(_track).toList();
 
-  /// Without sign-in there is no personal library; the home feed's songs
-  /// stand in for it.
+  /// Signed in: liked songs first, then the home feed. Signed out: the
+  /// home feed's songs stand in for a library.
   @override
   Future<List<Track>> library() async => [
+    if (signedIn) ...await likedSongs(),
     for (final (_, tracks) in await home()) ...tracks,
   ];
+
+  Future<List<Track>> likedSongs() async {
+    if (!signedIn) return const [];
+    return InnerTubeParser.songs(await _api.likedSongs()).map(_track).toList();
+  }
+
+  /// Fills in the account's name and photo after sign-in.
+  Future<void> refreshProfile() async {
+    final a = account;
+    if (a == null || !a.signedIn) return;
+    try {
+      final p = InnerTubeParser.profile(await _api.accountMenu());
+      a.setProfile(name: p.name, handle: p.handle, photo: p.photo);
+    } catch (e) {
+      debugPrint('YouTube Music: profile unavailable: $e');
+    }
+  }
 
   @override
   Future<List<Track>> search(String query) async =>
@@ -100,7 +135,10 @@ class YouTubeMusicSource extends MusicSource {
     final cached = _streams[track.id];
     if (cached != null && DateTime.now().isBefore(cached.$2)) return cached.$1;
 
-    final order = [?_working, ...clients.where((c) => c != _working)];
+    // Signed in, the TV client goes first: it honours the session, which
+    // gets past YouTube's "confirm you're not a bot" check.
+    final preferred = signedIn ? [YoutubeApiClient.tv, ...clients] : clients;
+    final order = [?_working, ...preferred.where((c) => c != _working)];
     Object? lastError;
     for (final client in order) {
       try {

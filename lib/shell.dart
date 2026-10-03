@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'pages/account_page.dart';
 import 'pages/albums_page.dart';
 import 'pages/artist_page.dart';
 import 'pages/featured_page.dart';
@@ -34,6 +35,7 @@ class _PanoramaShellState extends State<PanoramaShell>
     XmbItem(LucideIcons.sparkles300, 'New'),
     XmbItem(LucideIcons.disc3300, 'Playing'),
     XmbItem(LucideIcons.user300, 'Artist'),
+    XmbItem(LucideIcons.circleUserRound300, 'Account'),
   ];
 
   static const _pages = <Widget>[
@@ -43,6 +45,7 @@ class _PanoramaShellState extends State<PanoramaShell>
     NewPage(),
     PlayingPage(),
     ArtistPage(),
+    AccountPage(),
   ];
 
   static const _spring = SpringDescription(
@@ -67,6 +70,7 @@ class _PanoramaShellState extends State<PanoramaShell>
 
   int get _last => _pages.length - 1;
 
+  static const _playingIndex = 4;
   static const _ids = [
     'music',
     'albums',
@@ -172,14 +176,29 @@ class _PanoramaShellState extends State<PanoramaShell>
                                 left: (i - p) * MsSizes.pageStride,
                                 top: 0,
                                 bottom: 0,
-                                width: width,
+                                // One panorama step wide, so a page (and
+                                // its backgrounds) never bleeds into the next.
+                                width: i == _last ? width : MsSizes.pageStride,
                                 child: RepaintBoundary(child: page),
                               ),
                         ],
                       );
                     },
                   ),
-                  const Positioned.fill(child: ColumnFade()),
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: _page,
+                      builder: (context, _) {
+                        // On Playing the band under the bar takes the album wash.
+                        final t = (1 - (_page.value - _playingIndex).abs())
+                            .clamp(0.0, 1.0);
+                        final wash = albumWash(Accent.schemeOf(context)).bottom;
+                        return ColumnFade(
+                          color: Color.lerp(MsColors.background, wash, t)!,
+                        );
+                      },
+                    ),
+                  ),
                   const Positioned(
                     left: 0,
                     right: 0,

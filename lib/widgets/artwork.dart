@@ -296,25 +296,34 @@ abstract final class LocalCovers {
 
 /// The accent colour of a cover: its most vivid colour, used to tint the
 /// wave, the glow and shadows so the whole page follows the music.
+/// Colours of a cover: its most vivid colour (the accent) and a second,
+/// different hue, used to tint the wave, glow, shadows and the Now
+/// Playing background so the app follows the music.
 abstract final class ArtworkPalette {
   static const _painted = {
-    ArtStyle.futuristic: Color(0xFF8C7BFF),
-    ArtStyle.lake: Color(0xFFE0956A),
-    ArtStyle.dust: Color(0xFFD4893A),
+    ArtStyle.futuristic: (Color(0xFF8C7BFF), Color(0xFF6EC8FF)),
+    ArtStyle.lake: (Color(0xFFE0956A), Color(0xFF6C7BB0)),
+    ArtStyle.dust: (Color(0xFFD4893A), Color(0xFFC9A87E)),
   };
 
-  static final _cache = <String, Color>{};
+  static const _fallback = (Color(0xFF8C7BFF), Color(0xFF6EC8FF));
 
-  static Color? peek(ArtworkRef art) => switch (art) {
+  static final _cache = <String, (Color, Color)>{};
+
+  static (Color, Color)? peekScheme(ArtworkRef art) => switch (art) {
     PaintedArtwork(:final style) => _painted[style],
     _ => _cache[_key(art)],
   };
 
-  static Future<Color> of(ArtworkRef art) async {
-    final known = peek(art);
+  static Color? peek(ArtworkRef art) => peekScheme(art)?.$1;
+
+  static Future<Color> of(ArtworkRef art) async => (await schemeOf(art)).$1;
+
+  static Future<(Color, Color)> schemeOf(ArtworkRef art) async {
+    final known = peekScheme(art);
     if (known != null) return known;
     Uint8List? bytes;
-    ArtStyle fallback = ArtStyle.futuristic;
+    var fallback = ArtStyle.futuristic;
     try {
       switch (art) {
         case NetworkArtwork(:final url):
@@ -327,8 +336,8 @@ abstract final class ArtworkPalette {
           break;
       }
     } catch (_) {}
-    final color = bytes == null ? _painted[fallback]! : await _vivid(bytes);
-    return _cache[_key(art)] = color;
+    final scheme = bytes == null ? _painted[fallback]! : await _scheme(bytes);
+    return _cache[_key(art)] = scheme;
   }
 
   static String _key(ArtworkRef art) => switch (art) {
@@ -337,21 +346,22 @@ abstract final class ArtworkPalette {
     PaintedArtwork(:final style) => style.name,
   };
 
-  /// Decodes a 24 px thumbnail and picks the most saturated mid-bright
-  /// colour, weighted by how often it appears.
-  static Future<Color> _vivid(Uint8List bytes) async {
+  /// Decodes a 24 px thumbnail, groups pixels into 12 hue buckets weighted
+  /// by saturation, and returns the strongest bucket and the strongest one
+  /// at least 60° away (or a shifted hue when the cover is one colour).
+  static Future<(Color, Color)> _scheme(Uint8List bytes) async {
     final codec = await ui.instantiateImageCodec(bytes, targetWidth: 24);
     final frame = await codec.getNextFrame();
     final data = await frame.image.toByteData(
       format: ui.ImageByteFormat.rawRgba,
     );
     frame.image.dispose();
-    if (data == null) return _painted[ArtStyle.futuristic]!;
+    if (data == null) return _fallback;
     final buckets = <int, (double, double, double, double)>{};
     for (var i = 0; i + 3 < data.lengthInBytes; i += 4) {
-      final r = data.getUint8(i) / 255,
-          g = data.getUint8(i + 1) / 255,
-          b = data.getUint8(i + 2) / 255;
+      final r = data.getUint8(i) / 255;
+      final g = data.getUint8(i + 1) / 255;
+      final b = data.getUint8(i + 2) / 255;
       final hsv = HSVColor.fromColor(
         Color.fromARGB(
           255,
@@ -362,7 +372,7 @@ abstract final class ArtworkPalette {
       );
       if (hsv.value < 0.25 || hsv.value > 0.97) continue;
       final weight = hsv.saturation * hsv.saturation;
-      final bucket = (hsv.hue / 30).floor();
+      final bucket = (hsv.hue / 30).floor() % 12;
       final e = buckets[bucket] ?? (0, 0, 0, 0);
       buckets[bucket] = (
         e.$1 + r * weight,
@@ -371,21 +381,36 @@ abstract final class ArtworkPalette {
         e.$4 + weight,
       );
     }
-    if (buckets.isEmpty) return const Color(0xFF8C7BFF);
-    final best = buckets.values.reduce((a, b) => a.$4 >= b.$4 ? a : b);
-    if (best.$4 < 0.5) return const Color(0xFF8C7BFF);
-    final c = Color.fromARGB(
-      255,
-      (best.$1 / best.$4 * 255).round(),
-      (best.$2 / best.$4 * 255).round(),
-      (best.$3 / best.$4 * 255).round(),
-    );
-    // Keep it bright enough to read as a glow on white.
-    final hsv = HSVColor.fromColor(c);
-    return hsv
-        .withValue(math.max(hsv.value, 0.7))
-        .withSaturation(math.max(hsv.saturation, 0.45))
-        .toColor();
+    final ranked = buckets.entries.where((e) => e.value.$4 >= 0.3).toList()
+      ..sort((a, b) => b.value.$4.compareTo(a.value.$4));
+    if (ranked.isEmpty) return _fallback;
+
+    Color colour((double, double, double, double) v) {
+      final c = Color.fromARGB(
+        255,
+        (v.$1 / v.$4 * 255).round(),
+        (v.$2 / v.$4 * 255).round(),
+        (v.$3 / v.$4 * 255).round(),
+      );
+      // Keep it bright enough to read as light on white.
+      final hsv = HSVColor.fromColor(c);
+      return hsv
+          .withValue(math.max(hsv.value, 0.7))
+          .withSaturation(math.max(hsv.saturation, 0.45))
+          .toColor();
+    }
+
+    final primary = colour(ranked.first.value);
+    int hueGap(int a, int b) => math.min((a - b).abs(), 12 - (a - b).abs());
+    final other = ranked
+        .skip(1)
+        .where((e) => hueGap(e.key, ranked.first.key) >= 2);
+    final secondary = other.isNotEmpty
+        ? colour(other.first.value)
+        : HSVColor.fromColor(primary)
+              .withHue((HSVColor.fromColor(primary).hue + 40) % 360)
+              .toColor();
+    return (primary, secondary);
   }
 }
 

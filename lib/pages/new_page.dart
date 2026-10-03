@@ -131,7 +131,7 @@ class NewPage extends StatelessWidget {
           crossAxisSpacing: MsSizes.tileGap,
           childAspectRatio: 1.5,
         ),
-        itemCount: older.length,
+        itemCount: older.length.clamp(0, 2),
         itemBuilder: (context, i) {
           final a = older[i];
           return MetroTile(

@@ -4,7 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'dart:async';
+
 import 'library/library.dart';
+import 'pages/account_page.dart';
+import 'sources/youtube_music/account.dart';
 import 'playback/analysis_service.dart';
 import 'playback/audio_handler.dart';
 import 'playback/demo_player.dart';
@@ -23,10 +27,12 @@ Future<void> main() async {
   PaintedArtCache.warmUp();
   final device = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  final sources = <MusicSource>[
-    if (device) LocalSource(),
-    if (device && kYouTubeMusicEnabled) YouTubeMusicSource(),
-  ];
+  final account = YouTubeAccount();
+  await account.load();
+  final youtube = device && kYouTubeMusicEnabled
+      ? YouTubeMusicSource(account: account)
+      : null;
+  final sources = <MusicSource>[if (device) LocalSource(), ?youtube];
   final analysis = AnalysisService({for (final s in sources) s.id: s});
   final library = LibraryController(sources, analysisOf: analysis.cached);
 
@@ -52,45 +58,57 @@ Future<void> main() async {
   }
   await library.stats.attach(player);
 
-  runApp(MusicSenseApp(player: player, library: library));
-  if (device) await library.load();
+  runApp(MusicSenseApp(player: player, library: library, account: account));
+  if (device) {
+    unawaited(youtube?.refreshProfile());
+    await library.load();
+  }
 }
 
 class MusicSenseApp extends StatelessWidget {
-  const MusicSenseApp({super.key, required this.player, required this.library});
+  const MusicSenseApp({
+    super.key,
+    required this.player,
+    required this.library,
+    required this.account,
+  });
 
   final PlaybackController player;
   final LibraryController library;
+  final YouTubeAccount account;
 
   @override
   Widget build(BuildContext context) {
-    return PlayerScope(
-      player: player,
-      child: LibraryScope(
-        library: library,
-        child: NowPlayingAccent(
-          child: BeatClock(
-            child: MaterialApp(
-              title: 'Music Sense',
-              debugShowCheckedModeBanner: false,
-              theme: ThemeData(
-                fontFamily: MsText.family,
-                scaffoldBackgroundColor: MsColors.background,
-                splashFactory: NoSplash.splashFactory,
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: MsColors.accent,
-                  primary: MsColors.accent,
-                  surface: MsColors.background,
+    return AccountScope(
+      account: account,
+      child: PlayerScope(
+        player: player,
+        child: LibraryScope(
+          library: library,
+          child: NowPlayingAccent(
+            child: BeatClock(
+              child: MaterialApp(
+                title: 'Music Sense',
+                debugShowCheckedModeBanner: false,
+                theme: ThemeData(
+                  fontFamily: MsText.family,
+                  scaffoldBackgroundColor: MsColors.background,
+                  splashFactory: NoSplash.splashFactory,
+                  colorScheme: ColorScheme.fromSeed(
+                    seedColor: MsColors.accent,
+                    primary: MsColors.accent,
+                    surface: MsColors.background,
+                  ),
                 ),
-              ),
-              home: const AnnotatedRegion<SystemUiOverlayStyle>(
-                value: SystemUiOverlayStyle(
-                  statusBarColor: Color(0x00000000),
-                  statusBarIconBrightness: Brightness.dark,
-                  systemNavigationBarColor: Color(0x00000000),
-                  systemNavigationBarIconBrightness: Brightness.dark,
+                home: const AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle(
+                    statusBarColor: Color(0x00000000),
+                    statusBarIconBrightness: Brightness.dark,
+                    systemNavigationBarColor: Color(0x00000000),
+                    systemNavigationBarIconBrightness: Brightness.dark,
+                  ),
+                  child: _Frame(child: PanoramaShell()),
                 ),
-                child: _Frame(child: PanoramaShell()),
               ),
             ),
           ),

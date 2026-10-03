@@ -27,7 +27,7 @@ class PlayingPage extends StatelessWidget {
         ? player.upNext
         : library.recent.where((t) => t != song).take(30).toList();
 
-    return PanoramaPage(
+    final page = PanoramaPage(
       id: 'playing',
       title: 'now playing',
       width: width,
@@ -35,39 +35,50 @@ class PlayingPage extends StatelessWidget {
       header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox.square(
-            dimension: width,
-            child: song == null
-                ? const SizedBox()
-                : AnimatedSwitcher(
+          // Cover Flow: the cover on glass, its reflection fading under
+          // the title.
+          SizedBox(
+            width: width,
+            height: width + 22 + 52,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                if (song != null)
+                  AnimatedSwitcher(
                     duration: MsMotion.medium,
-                    child: LiveCover(
+                    child: ReflectedCover(
                       key: ValueKey(song.key),
                       art: song.artwork,
-                      radius: 14,
+                      size: width,
                       motes: true,
                     ),
                   ),
-          ),
-          const SizedBox(height: 22),
-          AnimatedSwitcher(
-            duration: MsMotion.medium,
-            child: Column(
-              key: ValueKey(song?.key),
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  song?.title ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: MsText.songTitleLarge,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitleOf(song),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: MsText.rowSubtitle.copyWith(fontSize: 13),
+                Positioned(
+                  top: width + 22,
+                  left: 0,
+                  right: 0,
+                  child: AnimatedSwitcher(
+                    duration: MsMotion.medium,
+                    child: Column(
+                      key: ValueKey(song?.key),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          song?.title ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: MsText.songTitleLarge,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          subtitleOf(song),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: MsText.rowSubtitle.copyWith(fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -147,6 +158,14 @@ class PlayingPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+
+    // The page takes the album's colours, like Apple Music's player.
+    return Stack(
+      children: [
+        const Positioned.fill(child: AlbumBackground()),
+        page,
+      ],
     );
   }
 

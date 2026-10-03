@@ -70,7 +70,9 @@ class AlbumsPage extends StatelessWidget {
             active: player.track != null && album.tracks.contains(player.track),
             onTap: () => play(album),
           );
-          return i < 6 ? Reveal(order: 3 + i, child: row) : row;
+          return ColumnFocus(
+            child: i < 6 ? Reveal(order: 3 + i, child: row) : row,
+          );
         },
       ),
     );

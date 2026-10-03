@@ -238,9 +238,7 @@ class MediaRow extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: active
-                        ? MsText.rowTitle.copyWith(color: MsColors.accent)
-                        : MsText.rowTitle,
+                    style: MsText.rowTitle,
                   ),
                   const SizedBox(height: 3),
                   Text(

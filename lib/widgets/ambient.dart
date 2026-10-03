@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,7 +23,7 @@ class NowPlayingAccent extends StatefulWidget {
 }
 
 class _NowPlayingAccentState extends State<NowPlayingAccent> {
-  Color _target = MsColors.accentSoft;
+  (Color, Color) _target = (MsColors.accentSoft, MsColors.wave);
   String? _key;
 
   @override
@@ -32,11 +33,11 @@ class _NowPlayingAccentState extends State<NowPlayingAccent> {
     if (track == null || track.key == _key) return;
     _key = track.key;
     final art = track.artwork;
-    final quick = ArtworkPalette.peek(art);
+    final quick = ArtworkPalette.peekScheme(art);
     if (quick != null) {
       _target = quick;
     } else {
-      ArtworkPalette.of(art).then((c) {
+      ArtworkPalette.schemeOf(art).then((c) {
         if (mounted && _key == track.key) setState(() => _target = c);
       });
     }
@@ -44,28 +45,295 @@ class _NowPlayingAccentState extends State<NowPlayingAccent> {
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<Color?>(
-      tween: ColorTween(end: _target),
+    return TweenAnimationBuilder<double>(
+      key: ValueKey(_target),
+      tween: Tween(begin: 0, end: 1),
       duration: const Duration(milliseconds: 1200),
       curve: Curves.easeInOut,
-      builder: (context, color, child) =>
-          Accent(color: color ?? _target, child: child!),
+      builder: (context, t, child) {
+        final from = _from ?? _target;
+        final scheme = (
+          Color.lerp(from.$1, _target.$1, t)!,
+          Color.lerp(from.$2, _target.$2, t)!,
+        );
+        if (t >= 1) _from = _target;
+        _current = scheme;
+        return Accent(color: scheme.$1, secondary: scheme.$2, child: child!);
+      },
       child: widget.child,
     );
+  }
+
+  (Color, Color)? _from;
+  (Color, Color)? _current;
+
+  @override
+  void setState(VoidCallback fn) {
+    // Start the next fade from wherever the last one had got to.
+    _from = _current ?? _from;
+    super.setState(fn);
   }
 }
 
 class Accent extends InheritedWidget {
-  const Accent({super.key, required this.color, required super.child});
+  const Accent({
+    super.key,
+    required this.color,
+    required this.secondary,
+    required super.child,
+  });
 
+  /// The cover's most vivid colour.
   final Color color;
+
+  /// A second hue from the cover.
+  final Color secondary;
 
   static Color of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<Accent>()?.color ??
       MsColors.accentSoft;
 
+  static (Color, Color) schemeOf(BuildContext context) {
+    final a = context.dependOnInheritedWidgetOfExactType<Accent>();
+    return a == null
+        ? (MsColors.accentSoft, MsColors.wave)
+        : (a.color, a.secondary);
+  }
+
   @override
-  bool updateShouldNotify(Accent oldWidget) => oldWidget.color != color;
+  bool updateShouldNotify(Accent oldWidget) =>
+      oldWidget.color != color || oldWidget.secondary != secondary;
+}
+
+/// The light wash the Now Playing page takes from the cover: soft enough
+/// that dark type stays crisp, strong enough to read as the album's colour.
+({Color top, Color bottom}) albumWash((Color, Color) scheme) => (
+  top: Color.lerp(MsColors.background, scheme.$1, 0.34)!,
+  bottom: Color.lerp(MsColors.background, scheme.$2, 0.22)!,
+);
+
+/// The Now Playing background: the album's colours as slow-moving light,
+/// like Apple Music's player, painted once and moved by transforms.
+class AlbumBackground extends StatefulWidget {
+  const AlbumBackground({super.key});
+
+  @override
+  State<AlbumBackground> createState() => _AlbumBackgroundState();
+}
+
+class _AlbumBackgroundState extends State<AlbumBackground>
+    with SingleTickerProviderStateMixin {
+  late final _drift = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 28),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _drift.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Accent.schemeOf(context);
+    final wash = albumWash(scheme);
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, size) {
+          final w = size.maxWidth, h = size.maxHeight;
+          Widget blob(
+            Color c,
+            double alpha,
+            double r,
+            Offset Function(double t) at,
+          ) {
+            final dot = RepaintBoundary(
+              child: SizedBox.square(
+                dimension: r * 2,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        c.withValues(alpha: alpha),
+                        c.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+            return AnimatedBuilder(
+              animation: _drift,
+              child: dot,
+              builder: (context, child) {
+                final p = at(_drift.value * math.pi * 2);
+                return Transform.translate(
+                  offset: Offset(p.dx - r, p.dy - r),
+                  child: child,
+                );
+              },
+            );
+          }
+
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [wash.top, wash.bottom],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: blob(
+                  scheme.$1,
+                  0.42,
+                  w * 0.8,
+                  (t) => Offset(
+                    w * (0.75 + 0.12 * math.sin(t)),
+                    h * (0.18 + 0.06 * math.cos(t)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: blob(
+                  scheme.$2,
+                  0.36,
+                  w * 0.75,
+                  (t) => Offset(
+                    w * (0.1 + 0.12 * math.cos(t + 1)),
+                    h * (0.5 + 0.08 * math.sin(t)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: blob(
+                  scheme.$1,
+                  0.22,
+                  w * 0.6,
+                  (t) => Offset(
+                    w * (0.6 + 0.1 * math.sin(t + 3)),
+                    h * (0.85 + 0.04 * math.cos(t)),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A cover standing on glass, as in Cover Flow: below it, a soft mirrored
+/// reflection that fades out, with a faint highlight at the edge.
+class ReflectedCover extends StatelessWidget {
+  const ReflectedCover({
+    super.key,
+    required this.art,
+    required this.size,
+    this.radius = 14,
+    this.reflection = 0.34,
+    this.motes = false,
+  });
+
+  final ArtworkRef art;
+  final double size;
+  final double radius;
+
+  /// Height of the reflection as a fraction of the cover.
+  final double reflection;
+  final bool motes;
+
+  static const gap = 3.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final reflected = RepaintBoundary(
+      child: IgnorePointer(
+        child: ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 1.4, sigmaY: 2.2),
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (rect) => const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x66000000), Color(0x00000000)],
+            ).createShader(rect),
+            child: ClipRect(
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: reflection,
+                child: Transform.flip(
+                  flipY: true,
+                  child: SizedBox.square(
+                    dimension: size,
+                    child: Artwork(art: art, radius: radius),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return SizedBox(
+      width: size,
+      height: size * (1 + reflection) + gap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(top: size + gap, left: 0, width: size, child: reflected),
+          // Glass edge: a hairline of light where cover meets reflection.
+          Positioned(
+            top: size + gap - 0.5,
+            left: radius,
+            right: radius,
+            height: 1,
+            child: const IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Color(0x00FFFFFF),
+                      Color(0x99FFFFFF),
+                      Color(0x00FFFFFF),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            width: size,
+            height: size,
+            child: LiveCover(
+              art: art,
+              radius: radius,
+              motes: motes,
+              shadow: false,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One clock for everything that moves with the music: a 0–1 pulse that
@@ -549,11 +817,13 @@ class LiveCover extends StatelessWidget {
     required this.art,
     this.radius = 12,
     this.motes = false,
+    this.shadow = true,
   });
 
   final ArtworkRef art;
   final double radius;
   final bool motes;
+  final bool shadow;
 
   @override
   Widget build(BuildContext context) {
@@ -563,7 +833,7 @@ class LiveCover extends StatelessWidget {
       child: Artwork(
         art: art,
         radius: radius,
-        shadow: true,
+        shadow: shadow,
         shadowColor: accent,
       ),
     );

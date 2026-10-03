@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:music_sense/library/library.dart';
 import 'package:music_sense/main.dart';
 import 'package:music_sense/playback/demo_player.dart';
+import 'package:music_sense/sources/youtube_music/account.dart';
 
 /// The wave animates forever, so pumpAndSettle never returns; step frames.
 Future<void> settle(WidgetTester tester) async {
@@ -19,7 +20,13 @@ void main() {
     final library = LibraryController(const []);
     final player = DemoPlayer(library.recent);
     addTearDown(player.dispose);
-    await tester.pumpWidget(MusicSenseApp(player: player, library: library));
+    await tester.pumpWidget(
+      MusicSenseApp(
+        player: player,
+        library: library,
+        account: YouTubeAccount(),
+      ),
+    );
     await settle(tester);
   }
 

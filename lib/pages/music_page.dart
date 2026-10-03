@@ -149,7 +149,9 @@ class SongList extends StatelessWidget {
           active: song == current,
           onTap: () => onTap(song),
         );
-        return i < 6 ? Reveal(order: 4 + i, child: row) : row;
+        return ColumnFocus(
+          child: i < 6 ? Reveal(order: 4 + i, child: row) : row,
+        );
       },
     );
   }

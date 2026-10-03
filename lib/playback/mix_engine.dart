@@ -25,14 +25,21 @@ class MixEngine extends PlaybackController {
   }) {
     for (final deck in _decks) {
       // Play/pause changes (including from headphones) refresh the pages.
-      deck.audio.playingStream.listen((_) {
-        if (deck == _active) notifyListeners();
-      });
-      deck.audio.processingStateStream.listen((state) {
-        if (state == ProcessingState.completed && deck == _active && !_mixing) {
-          _advance();
-        }
-      });
+      _subscriptions.add(
+        deck.audio.playingStream.listen((_) {
+          if (!_disposed && deck == _active) notifyListeners();
+        }),
+      );
+      _subscriptions.add(
+        deck.audio.processingStateStream.listen((state) {
+          if (_disposed) return;
+          if (state == ProcessingState.completed &&
+              deck == _active &&
+              !_mixing) {
+            _advance();
+          }
+        }),
+      );
     }
   }
 
@@ -42,6 +49,8 @@ class MixEngine extends PlaybackController {
   final NextTrackScorer _scorer;
 
   final _decks = [Deck(), Deck()];
+  final _subscriptions = <StreamSubscription<Object?>>[];
+  bool _disposed = false;
   int _activeIndex = 0;
   Deck get _active => _decks[_activeIndex];
   Deck get _incoming => _decks[1 - _activeIndex];
@@ -403,7 +412,16 @@ class MixEngine extends PlaybackController {
   }
 
   @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
+    for (final s in _subscriptions) {
+      s.cancel();
+    }
     _conductor?.cancel();
     for (final d in _decks) {
       unawaited(d.dispose());

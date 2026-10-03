@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
@@ -48,7 +49,12 @@ class PanoramaPage extends StatefulWidget {
 }
 
 class _PanoramaPageState extends State<PanoramaPage> {
-  late final _controller = ScrollController();
+  late final _controller = ScrollController()..addListener(_onScroll);
+
+  /// Bumped on every scroll so list rows can re-check their focus.
+  final _scrolled = ValueNotifier<int>(0);
+
+  void _onScroll() => _scrolled.value++;
   ScrollToTop? _scope;
 
   @override
@@ -75,6 +81,7 @@ class _PanoramaPageState extends State<PanoramaPage> {
   void dispose() {
     _scope?.requests.removeListener(_onRequest);
     _controller.dispose();
+    _scrolled.dispose();
     super.dispose();
   }
 
@@ -102,46 +109,58 @@ class _PanoramaPageState extends State<PanoramaPage> {
           ],
         );
 
-        return CustomScrollView(
-          key: PageStorageKey('page-${widget.id}'),
-          controller: _controller,
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
-          slivers: [
-            SliverToBoxAdapter(
-              child: widget.backdrop == null
-                  ? Padding(
-                      padding: padding.copyWith(top: widget.titleTop),
-                      child: top,
-                    )
-                  : Stack(
-                      children: [
-                        SizedBox(
-                          height: widget.backdropHeight,
-                          width: double.infinity,
-                          child: widget.backdrop,
-                        ),
-                        Padding(
-                          padding: padding.copyWith(top: widget.titleTop),
-                          child: top,
-                        ),
-                      ],
-                    ),
+        return _ScrollTick(
+          ticks: _scrolled,
+          child: CustomScrollView(
+            key: PageStorageKey('page-${widget.id}'),
+            controller: _controller,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
             ),
-            if (widget.body != null)
-              SliverPadding(
-                padding: padding.copyWith(top: widget.bodyGap),
-                sliver: widget.body,
+            slivers: [
+              SliverToBoxAdapter(
+                child: widget.backdrop == null
+                    ? Padding(
+                        padding: padding.copyWith(top: widget.titleTop),
+                        child: top,
+                      )
+                    : Stack(
+                        children: [
+                          SizedBox(
+                            height: widget.backdropHeight,
+                            width: double.infinity,
+                            child: widget.backdrop,
+                          ),
+                          Padding(
+                            padding: padding.copyWith(top: widget.titleTop),
+                            child: top,
+                          ),
+                        ],
+                      ),
               ),
-            const SliverToBoxAdapter(
-              child: SizedBox(height: PanoramaPage.endSpace),
-            ),
-          ],
+              if (widget.body != null)
+                SliverPadding(
+                  padding: padding.copyWith(top: widget.bodyGap),
+                  sliver: widget.body,
+                ),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: PanoramaPage.endSpace),
+              ),
+            ],
+          ),
         );
       },
     );
   }
+}
+
+class _ScrollTick extends InheritedWidget {
+  const _ScrollTick({required this.ticks, required super.child});
+
+  final ValueListenable<int> ticks;
+
+  @override
+  bool updateShouldNotify(_ScrollTick oldWidget) => oldWidget.ticks != ticks;
 }
 
 /// Lets the shell ask a page to scroll back to the top (tapping the active
@@ -163,33 +182,31 @@ class ScrollToTop extends InheritedWidget {
 /// hidden behind the bar's band and washed out beneath it, as in the
 /// design. A single overlay drawn once for all pages.
 class ColumnFade extends StatelessWidget {
-  const ColumnFade({super.key});
+  const ColumnFade({super.key, this.color = MsColors.background});
+
+  /// The page colour under the bar (white, or the album wash on Playing).
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     const bar = MsSizes.barFromBottom;
     const half = MsSizes.barHeight / 2;
+    Color a(double alpha) => color.withValues(alpha: alpha);
     return IgnorePointer(
       child: Align(
         alignment: Alignment.bottomCenter,
         child: SizedBox(
           height: bar + half + 18,
           width: double.infinity,
-          child: const DecoratedBox(
+          child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 // From the top of the fade: soft edge, solid behind the
                 // icons and labels, then a translucent wash below.
-                stops: [0, 0.08, 0.46, 0.53, 1],
-                colors: [
-                  Color(0x00FFFFFF),
-                  Color(0xF2FFFFFF),
-                  Color(0xF2FFFFFF),
-                  Color(0x8CFFFFFF),
-                  Color(0x99FFFFFF),
-                ],
+                stops: const [0, 0.08, 0.46, 0.53, 1],
+                colors: [a(0), a(0.95), a(0.95), a(0.55), a(0.6)],
               ),
             ),
           ),
@@ -216,6 +233,84 @@ class SectionTitle extends StatelessWidget {
           if (trailing != null) ...[const SizedBox(width: 4), trailing!],
         ],
       ),
+    );
+  }
+}
+
+/// The XMB column's focus: a list row is fully visible only in the two-row
+/// band just above the bar; rows that scroll up past it fade away, so the
+/// column never shows more than two songs at once. (Below the bar, the
+/// shell's wash takes over.)
+class ColumnFocus extends StatefulWidget {
+  const ColumnFocus({super.key, required this.child});
+
+  final Widget child;
+
+  /// Height of the focus band: two rows (54) and the gap between them.
+  static const band = 2 * 54.0 + 16 + 10;
+
+  @override
+  State<ColumnFocus> createState() => _ColumnFocusState();
+}
+
+class _ColumnFocusState extends State<ColumnFocus> {
+  final _opacity = ValueNotifier<double>(1);
+  ValueListenable<int>? _ticks;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ticks = context
+        .dependOnInheritedWidgetOfExactType<_ScrollTick>()
+        ?.ticks;
+    if (ticks != _ticks) {
+      _ticks?.removeListener(_schedule);
+      _ticks = ticks?..addListener(_schedule);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => _update());
+  }
+
+  bool _scheduled = false;
+
+  /// Scroll events arrive before the new layout; measure after it.
+  void _schedule() {
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      _update();
+    });
+  }
+
+  void _update() {
+    if (!mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached || !box.hasSize) return;
+    final centre = box.localToGlobal(Offset(0, box.size.height / 2)).dy;
+    final height = MediaQuery.sizeOf(context).height;
+    // Where the bar's fade begins; the focus band sits right above it.
+    final zoneBottom =
+        height - MsSizes.barFromBottom - MsSizes.barHeight / 2 - 18;
+    final bandTop = zoneBottom - ColumnFocus.band;
+    final past = ((bandTop - centre) / 30).clamp(0.0, 1.0);
+    final next = 1 - 0.88 * Curves.easeOut.transform(past);
+    if ((next - _opacity.value).abs() > 0.01) _opacity.value = next;
+  }
+
+  @override
+  void dispose() {
+    _ticks?.removeListener(_schedule);
+    _opacity.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<double>(
+      valueListenable: _opacity,
+      child: widget.child,
+      builder: (context, opacity, child) =>
+          opacity >= 0.99 ? child! : Opacity(opacity: opacity, child: child),
     );
   }
 }

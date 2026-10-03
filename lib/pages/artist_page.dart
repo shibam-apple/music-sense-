@@ -22,7 +22,7 @@ class ArtistPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = PlayerScope.of(context);
     final library = LibraryScope.of(context);
-    final width = MediaQuery.sizeOf(context).width - MsSizes.pageInset * 2;
+    const width = MsSizes.contentWidth;
 
     final current = player.track ?? library.recent.firstOrNull;
     final artist = current?.artist ?? '';
