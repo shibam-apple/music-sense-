@@ -93,15 +93,21 @@ void main() {
       final ctx = client.payload['context'] as Map;
       final name = ctx['client']['clientName'];
       final agent = ctx['client']['userAgent'] as String?;
-      final r = await http.post(
-        Uri.parse(client.apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': ?agent,
-          ...client.headers.map((k, v) => MapEntry(k, '$v')),
-        },
-        body: jsonEncode({...client.payload, 'videoId': searched.first.id}),
-      );
+      final http.Response r;
+      try {
+        r = await http.post(
+          Uri.parse(client.apiUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': ?agent,
+            ...client.headers.map((k, v) => MapEntry(k, '$v')),
+          },
+          body: jsonEncode({...client.payload, 'videoId': searched.first.id}),
+        );
+      } catch (e) {
+        print('  player $name: request failed: $e');
+        continue;
+      }
       try {
         final json = jsonDecode(r.body) as Map<String, dynamic>;
         final status = json['playabilityStatus'] as Map? ?? {};

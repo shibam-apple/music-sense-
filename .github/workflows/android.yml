@@ -64,6 +64,8 @@ jobs:
   youtube-live:
     name: YouTube Music live check
     runs-on: ubuntu-latest
+    # Informational: YouTube often refuses CI runners' data-centre IPs.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
