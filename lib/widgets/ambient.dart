@@ -106,6 +106,9 @@ class _BeatPulseState extends State<BeatPulse> with SingleTickerProviderStateMix
 
 /// PlayStation-style ambient backdrop: soft light in the cover's colour
 /// drifting slowly behind the pages, on top of the white canvas.
+///
+/// Each glow is painted once and only moved by a transform as it drifts,
+/// so the animation costs the GPU almost nothing per frame.
 class AmbientBackdrop extends StatefulWidget {
   const AmbientBackdrop({super.key});
 
@@ -130,46 +133,62 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
   Widget build(BuildContext context) {
     final color = Accent.of(context);
     return IgnorePointer(
-      child: RepaintBoundary(
-        child: CustomPaint(
-          painter: _AmbientPainter(_drift, color),
-          child: const SizedBox.expand(),
-        ),
-      ),
+      child: LayoutBuilder(builder: (context, size) {
+        final w = size.maxWidth, h = size.maxHeight;
+        Widget glow(double radius, double alpha, Offset Function(double t) at) {
+          final dot = RepaintBoundary(
+            child: SizedBox.square(
+              dimension: radius * 2,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [
+                    color.withValues(alpha: alpha),
+                    color.withValues(alpha: 0),
+                  ]),
+                ),
+              ),
+            ),
+          );
+          return AnimatedBuilder(
+            animation: _drift,
+            child: dot,
+            builder: (context, child) {
+              final c = at(_drift.value * math.pi * 2);
+              return Transform.translate(
+                offset: Offset(c.dx - radius, c.dy - radius),
+                child: child,
+              );
+            },
+          );
+        }
+
+        return Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              child: glow(w * 0.75, 0.13,
+                  (t) => Offset(w * (0.85 + 0.08 * math.sin(t)), h * (0.06 + 0.04 * math.cos(t * 2)))),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              child: glow(w * 0.6, 0.06,
+                  (t) => Offset(w * (0.05 + 0.1 * math.cos(t)), h * (0.42 + 0.05 * math.sin(t)))),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              child: glow(w * 0.7, 0.09,
+                  (t) => Offset(w * (0.6 + 0.1 * math.sin(t + 2)), h * (0.86 + 0.03 * math.cos(t)))),
+            ),
+          ],
+        );
+      }),
     );
   }
-}
-
-class _AmbientPainter extends CustomPainter {
-  _AmbientPainter(this.drift, this.color) : super(repaint: drift);
-
-  final Animation<double> drift;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = drift.value * math.pi * 2;
-    final w = size.width, h = size.height;
-    void glow(double x, double y, double r, double alpha) {
-      final c = Offset(x, y);
-      canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..shader = RadialGradient(colors: [
-            color.withValues(alpha: alpha),
-            color.withValues(alpha: 0),
-          ]).createShader(Rect.fromCircle(center: c, radius: r)),
-      );
-    }
-
-    glow(w * (0.85 + 0.08 * math.sin(t)), h * (0.06 + 0.04 * math.cos(t * 2)), w * 0.75, 0.13);
-    glow(w * (0.05 + 0.1 * math.cos(t)), h * (0.42 + 0.05 * math.sin(t)), w * 0.6, 0.06);
-    glow(w * (0.6 + 0.1 * math.sin(t + 2)), h * (0.86 + 0.03 * math.cos(t)), w * 0.7, 0.09);
-  }
-
-  @override
-  bool shouldRepaint(_AmbientPainter old) => old.color != color;
 }
 
 /// A soft diagonal light that sweeps across its child every few seconds,
@@ -332,8 +351,16 @@ class _MotesPainter extends CustomPainter {
       final x = size.width * (0.1 + 0.8 * m.x) + math.sin(age * 6 + m.x * 9) * 8;
       final alpha = math.sin(age * math.pi) * 0.9;
       final c = Offset(x, y);
-      canvas.drawCircle(c, m.size * 3,
-          Paint()..color = color.withValues(alpha: alpha * 0.25)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+      final r = m.size * 4;
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..shader = RadialGradient(colors: [
+            color.withValues(alpha: alpha * 0.3),
+            color.withValues(alpha: 0),
+          ]).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
       canvas.drawCircle(c, m.size, Paint()..color = Colors.white.withValues(alpha: alpha));
     }
   }

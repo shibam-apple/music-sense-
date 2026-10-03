@@ -227,12 +227,15 @@ class _WavePainter extends CustomPainter {
       final twinkle = 0.5 + 0.5 * math.sin(t * 7 + i * 2.1);
       final r = 1.1 + 0.9 * twinkle + 1.2 * pulse;
       final c = Offset(x, py);
+      // A gradient halo is far cheaper per frame than a blur filter.
       canvas.drawCircle(
         c,
-        r * 3.2,
+        r * 4,
         Paint()
-          ..color = color.withValues(alpha: 0.18 * twinkle)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+          ..shader = ui.Gradient.radial(c, r * 4, [
+            color.withValues(alpha: 0.22 * twinkle),
+            color.withValues(alpha: 0),
+          ]),
       );
       canvas.drawCircle(c, r * 0.7, Paint()..color = Colors.white.withValues(alpha: 0.9 * twinkle));
     }
