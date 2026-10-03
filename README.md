@@ -7,6 +7,8 @@ into the next with matched beats.
 The product spec (features, Beat Sense algorithm, sources, AI features and
 roadmap) is in the shared spec doc.
 
+![The six screens](docs/screens.png)
+
 ## Status
 
 Phase 1, UI shell. The six screens from the design are built and navigable:
