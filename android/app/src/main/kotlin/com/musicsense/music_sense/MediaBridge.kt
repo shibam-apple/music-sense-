@@ -1,7 +1,10 @@
 package com.musicsense.music_sense
 
+import android.Manifest
+import android.app.Activity
 import android.content.ContentUris
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.media.AudioFormat
 import android.media.MediaCodec
@@ -27,8 +30,17 @@ import java.util.concurrent.Executors
  * lists songs from MediaStore, loads their artwork, and decodes audio
  * (local or streamed) to mono float PCM for the Dart analyser.
  */
-class MediaBridge(private val context: Context, messenger: BinaryMessenger) :
-    MethodChannel.MethodCallHandler {
+class MediaBridge(
+    private val context: Context,
+    messenger: BinaryMessenger,
+    private val activity: Activity,
+) : MethodChannel.MethodCallHandler {
+
+    companion object {
+        const val PERMISSION_REQUEST = 7341
+    }
+
+    private var pendingPermission: MethodChannel.Result? = null
 
     private val channel = MethodChannel(messenger, "music_sense/media")
     private val worker = Executors.newFixedThreadPool(2)
@@ -45,6 +57,7 @@ class MediaBridge(private val context: Context, messenger: BinaryMessenger) :
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "requestAudioPermission" -> requestAudioPermission(result)
             "queryAudio" -> background(result) { queryAudio() }
             "artwork" -> background(result) {
                 artwork(call.argument<Number>("id")!!.toLong(), call.argument<Int>("size") ?: 512)
@@ -59,6 +72,38 @@ class MediaBridge(private val context: Context, messenger: BinaryMessenger) :
             }
             else -> result.notImplemented()
         }
+    }
+
+    private fun audioPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+
+    private fun hasAudioPermission(): Boolean =
+        context.checkSelfPermission(audioPermissions().first()) == PackageManager.PERMISSION_GRANTED
+
+    /** Asks for access to the music library (and notifications on 13+). */
+    private fun requestAudioPermission(result: MethodChannel.Result) {
+        if (hasAudioPermission()) {
+            result.success(true)
+            return
+        }
+        if (pendingPermission != null) {
+            result.error("busy", "A permission request is already showing", null)
+            return
+        }
+        pendingPermission = result
+        activity.requestPermissions(audioPermissions(), PERMISSION_REQUEST)
+    }
+
+    /** Forwarded from the activity. */
+    fun onPermissionResult(requestCode: Int): Boolean {
+        if (requestCode != PERMISSION_REQUEST) return false
+        pendingPermission?.success(hasAudioPermission())
+        pendingPermission = null
+        return true
     }
 
     private fun background(result: MethodChannel.Result, work: () -> Any?) {

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../library/models.dart';
 import 'music_source.dart';
@@ -19,9 +18,7 @@ class LocalSource extends MusicSource {
   Future<bool> open() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return false;
     // Android 13+ asks for audio; older versions for storage.
-    final audio = await Permission.audio.request();
-    if (audio.isGranted) return true;
-    return (await Permission.storage.request()).isGranted;
+    return await channel.invokeMethod<bool>('requestAudioPermission') ?? false;
   }
 
   @override

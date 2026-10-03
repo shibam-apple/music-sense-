@@ -9,7 +9,17 @@ class MainActivity : AudioServiceActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        media = MediaBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        media = MediaBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger, this)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        if (media?.onPermissionResult(requestCode) != true) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        }
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
