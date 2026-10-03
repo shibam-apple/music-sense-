@@ -21,13 +21,7 @@ class AccountPage extends StatelessWidget {
     final player = PlayerScope.of(context);
     final youtube = library.youtube;
 
-    Future<void> signIn() async {
-      if (await SignInPage.open(context, account)) {
-        await youtube?.refreshProfile();
-        await library.load();
-        player.message.value = 'Signed in to YouTube Music.';
-      }
-    }
+    Future<void> signIn() => signInToYouTube(context);
 
     Future<void> signOut() async {
       await account.signOut();
@@ -101,6 +95,19 @@ class AccountPage extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Opens Google sign-in for YouTube Music, then reloads the library with
+/// the signed-in account. Used by the grey sign-in tiles.
+Future<void> signInToYouTube(BuildContext context) async {
+  final account = AccountScope.of(context);
+  final library = LibraryScope.of(context);
+  final player = PlayerScope.of(context);
+  if (await SignInPage.open(context, account)) {
+    await library.youtube?.refreshProfile();
+    await library.load();
+    player.message.value = 'Signed in to YouTube Music.';
   }
 }
 

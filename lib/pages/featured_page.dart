@@ -4,6 +4,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../library/library.dart';
 import '../library/models.dart';
 import '../playback/playback_controller.dart';
+import 'account_page.dart';
 import '../theme/tokens.dart';
 import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
@@ -111,25 +112,34 @@ class FeaturedPage extends StatelessWidget {
           ]),
           TileRow([
             TileColumn(span: 3, [
-              library.isDemo
-                  ? const MetroTile(
-                      tone: TileTone.light,
-                      icon: LucideIcons.ticket300,
-                      label: 'Concerts near you',
-                      caption: 'Rufus Stewart · Sep 11',
-                    )
-                  // No concert data yet on real libraries; this slot holds
-                  // the Beat Sense switch instead.
-                  : MetroTile(
-                      tone: TileTone.light,
-                      icon: LucideIcons.audioWaveform300,
-                      label: 'Beat Sense',
-                      caption: player.beatSenseEnabled
-                          ? 'On · mixing songs together'
-                          : 'Off · tap to mix songs together',
-                      onTap: () =>
-                          player.beatSenseEnabled = !player.beatSenseEnabled,
-                    ),
+              // The wide grey tile: YouTube Music sign-in while signed out,
+              // then the Beat Sense switch (concerts on the sample library).
+              if (library.youtube != null && !AccountScope.of(context).signedIn)
+                MetroTile(
+                  tone: TileTone.light,
+                  icon: LucideIcons.logIn300,
+                  label: 'Sign in to YouTube Music',
+                  caption: 'Your liked songs, mixes and streams',
+                  onTap: () => signInToYouTube(context),
+                )
+              else if (library.isDemo)
+                const MetroTile(
+                  tone: TileTone.light,
+                  icon: LucideIcons.ticket300,
+                  label: 'Concerts near you',
+                  caption: 'Rufus Stewart · Sep 11',
+                )
+              else
+                MetroTile(
+                  tone: TileTone.light,
+                  icon: LucideIcons.audioWaveform300,
+                  label: 'Beat Sense',
+                  caption: player.beatSenseEnabled
+                      ? 'On · mixing songs together'
+                      : 'Off · tap to mix songs together',
+                  onTap: () =>
+                      player.beatSenseEnabled = !player.beatSenseEnabled,
+                ),
             ]),
           ]),
           TileRow([
