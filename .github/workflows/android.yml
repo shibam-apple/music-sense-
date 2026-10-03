@@ -61,6 +61,19 @@ jobs:
             YouTube Music. Signed with a debug key: for testing only.
           files: "*.apk"
 
+  youtube-live:
+    name: YouTube Music live check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test test_live --reporter expanded
+
   device-test:
     name: Emulator test (playback, Beat Sense, screenshots)
     needs: build

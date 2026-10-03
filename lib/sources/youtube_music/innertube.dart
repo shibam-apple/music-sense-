@@ -45,7 +45,9 @@ class InnerTubeClient {
       body: jsonEncode({'context': _context, ...body}),
     );
     if (response.statusCode != 200) {
-      throw InnerTubeException(endpoint, response.statusCode);
+      final body = response.body;
+      throw InnerTubeException(endpoint, response.statusCode,
+          body.length > 300 ? body.substring(0, 300) : body);
     }
     return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
   }
@@ -70,13 +72,14 @@ class InnerTubeClient {
 }
 
 class InnerTubeException implements Exception {
-  InnerTubeException(this.endpoint, this.status);
+  InnerTubeException(this.endpoint, this.status, [this.detail = '']);
 
   final String endpoint;
   final int status;
+  final String detail;
 
   @override
-  String toString() => 'InnerTube $endpoint failed with HTTP $status';
+  String toString() => 'InnerTube $endpoint failed with HTTP $status $detail';
 }
 
 /// A song as InnerTube describes it.
