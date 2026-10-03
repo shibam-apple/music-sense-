@@ -10,12 +10,15 @@ import 'pages/featured_page.dart';
 import 'pages/music_page.dart';
 import 'pages/new_page.dart';
 import 'pages/playing_page.dart';
+import 'library/library.dart';
+import 'library/models.dart';
 import 'playback/playback_controller.dart';
 import 'theme/tokens.dart';
 import 'widgets/ambient.dart';
 import 'widgets/panorama.dart';
 import 'widgets/toast.dart';
 import 'widgets/xmb_bar.dart';
+import 'widgets/xmb_dock.dart';
 
 /// The home screen: a Metro panorama of pages driven by one fractional page
 /// position, which also slides the XMB bar. Swipes settle with a spring.
@@ -78,6 +81,7 @@ class _PanoramaShellState extends State<PanoramaShell>
     'new',
     'playing',
     'artist',
+    'account',
   ];
   final _scrollTop = ValueNotifier<(String, int)>(('', 0));
 
@@ -163,6 +167,21 @@ class _PanoramaShellState extends State<PanoramaShell>
               child: Stack(
                 children: [
                   const Positioned.fill(child: AmbientBackdrop()),
+                  // The album's colours fill the screen as Playing comes
+                  // into view, so its neighbours never meet it at a seam.
+                  Positioned.fill(
+                    child: AnimatedBuilder(
+                      animation: _page,
+                      child: const AlbumBackground(),
+                      builder: (context, child) {
+                        final t = _nearPlaying;
+                        if (t <= 0) return const SizedBox();
+                        return t >= 1
+                            ? child!
+                            : Opacity(opacity: t, child: child);
+                      },
+                    ),
+                  ),
                   AnimatedBuilder(
                     animation: _page,
                     builder: (context, _) {
@@ -175,7 +194,7 @@ class _PanoramaShellState extends State<PanoramaShell>
                                 key: ValueKey(i),
                                 left: (i - p) * MsSizes.pageStride,
                                 top: 0,
-                                bottom: 0,
+                                bottom: MsSizes.columnBottom,
                                 // One panorama step wide, so a page (and
                                 // its backgrounds) never bleeds into the next.
                                 width: i == _last ? width : MsSizes.pageStride,
@@ -184,20 +203,6 @@ class _PanoramaShellState extends State<PanoramaShell>
                         ],
                       );
                     },
-                  ),
-                  Positioned.fill(
-                    child: AnimatedBuilder(
-                      animation: _page,
-                      builder: (context, _) {
-                        // On Playing the band under the bar takes the album wash.
-                        final t = (1 - (_page.value - _playingIndex).abs())
-                            .clamp(0.0, 1.0);
-                        final wash = albumWash(Accent.schemeOf(context)).bottom;
-                        return ColumnFade(
-                          color: Color.lerp(MsColors.background, wash, t)!,
-                        );
-                      },
-                    ),
                   ),
                   const Positioned(
                     left: 0,
@@ -215,6 +220,17 @@ class _PanoramaShellState extends State<PanoramaShell>
                       onSelect: _select,
                     ),
                   ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: constraints.maxHeight - MsSizes.dockTop,
+                    child: XmbDock(
+                      page: _page,
+                      playingIndex: _playingIndex,
+                      onOpenPlaying: () => _goTo(_playingIndex),
+                      actionsFor: _actionsFor,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -222,6 +238,82 @@ class _PanoramaShellState extends State<PanoramaShell>
         },
       ),
     );
+  }
+
+  /// 1 on the Playing page, falling to 0 one page away.
+  double get _nearPlaying =>
+      (1 - (_page.value - _playingIndex).abs()).clamp(0.0, 1.0);
+
+  /// The dock's options for each page (the XMB's column under its icon).
+  List<DockAction> _actionsFor(BuildContext context, int page) {
+    final player = PlayerScope.of(context);
+    final library = LibraryScope.of(context);
+
+    void shuffle(List<Track> songs, String what) {
+      if (songs.isEmpty) return;
+      player.playTracks(List.of(songs)..shuffle());
+      player.message.value = 'Shuffling $what';
+    }
+
+    final beatSense = DockAction(
+      LucideIcons.audioWaveform300,
+      player.beatSenseEnabled ? 'Beat Sense on' : 'Beat Sense off',
+      () {
+        player.beatSenseEnabled = !player.beatSenseEnabled;
+        player.message.value = player.beatSenseEnabled
+            ? 'Beat Sense on · songs will mix'
+            : 'Beat Sense off';
+      },
+      on: player.beatSenseEnabled,
+    );
+    final artist = player.track?.artist;
+    return switch (_ids[page.clamp(0, _ids.length - 1)]) {
+      'music' => [
+        DockAction(
+          LucideIcons.shuffle300,
+          'Shuffle all songs',
+          () => shuffle(library.recent, 'all songs'),
+        ),
+        beatSense,
+      ],
+      'albums' => [
+        DockAction(LucideIcons.shuffle300, 'Shuffle an album', () {
+          final albums = List.of(library.albums)..shuffle();
+          if (albums.isEmpty) return;
+          player.playTracks(albums.first.tracks);
+          player.message.value = 'Playing ${albums.first.title}';
+        }),
+        beatSense,
+      ],
+      'featured' || 'new' => [
+        DockAction(
+          LucideIcons.radio300,
+          'Start radio',
+          () => shuffle(library.recent, 'radio'),
+        ),
+        beatSense,
+      ],
+      'playing' => [
+        DockAction(
+          LucideIcons.user300,
+          'Go to artist',
+          () => _goTo(_playingIndex + 1),
+        ),
+        beatSense,
+      ],
+      'artist' => [
+        DockAction(
+          LucideIcons.shuffle300,
+          'Shuffle artist',
+          () => shuffle(
+            artist == null ? library.recent : library.byArtist(artist),
+            artist ?? 'all songs',
+          ),
+        ),
+        beatSense,
+      ],
+      _ => [beatSense],
+    };
   }
 
   bool _visible(int i, double p, double width) {

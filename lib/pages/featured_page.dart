@@ -60,7 +60,7 @@ class FeaturedPage extends StatelessWidget {
                       featured?.artwork ??
                       const PaintedArtwork(ArtStyle.futuristic),
                   label: featured?.title ?? '',
-                  caption: 'Featured · ${featured?.artist ?? ''}',
+                  caption: 'Featured · ${featured?.byline ?? ''}',
                   onTap: featured == null ? null : () => play([featured]),
                 ),
               ),
@@ -175,7 +175,7 @@ class FeaturedPage extends StatelessWidget {
           return MetroTile(
             art: t.artwork,
             label: t.title,
-            caption: t.artist,
+            caption: t.byline,
             onTap: () => player.playTracks(more, start: i),
           );
         },

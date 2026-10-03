@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../library/library.dart';
 import '../library/models.dart';
+import '../library/names.dart';
 import '../playback/playback_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/ambient.dart';
@@ -145,7 +146,7 @@ class SongList extends StatelessWidget {
         final row = MediaRow(
           art: song.artwork,
           title: song.title,
-          subtitle: subtitle?.call(song) ?? song.artist,
+          subtitle: subtitle?.call(song) ?? song.byline,
           active: song == current,
           onTap: () => onTap(song),
         );
@@ -159,7 +160,8 @@ class SongList extends StatelessWidget {
 
 String subtitleOf(Track? t) {
   if (t == null) return '';
-  return t.album == null ? t.artist : '${t.artist} · ${t.album}';
+  if (t.artist == unknownArtist || t.album == null) return t.byline;
+  return '${t.artist} · ${t.album}';
 }
 
 /// "NOW PLAYING", or Beat Sense's state while it's on, with dancing bars.

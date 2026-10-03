@@ -20,6 +20,8 @@ class MetroTile extends StatelessWidget {
     this.icon,
     this.selected = false,
     this.onTap,
+    this.onLongPress,
+    this.heroTag,
   });
 
   final TileTone tone;
@@ -30,6 +32,10 @@ class MetroTile extends StatelessWidget {
   final IconData? icon;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// Flies the artwork to a detail page that uses the same tag.
+  final Object? heroTag;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +56,7 @@ class MetroTile extends StatelessWidget {
 
     return Pressable(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: background,
@@ -59,7 +66,12 @@ class MetroTile extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (onArt) ...[
-              Artwork(art: art!),
+              heroTag == null
+                  ? Artwork(art: art!)
+                  : Hero(
+                      tag: heroTag!,
+                      child: Artwork(art: art!),
+                    ),
               if (label != null)
                 const DecoratedBox(
                   decoration: BoxDecoration(
@@ -207,10 +219,14 @@ class MediaRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.onTap,
+    this.onLongPress,
     this.active = false,
+    this.heroTag,
   });
 
   final ArtworkRef art;
+  final Object? heroTag;
+  final VoidCallback? onLongPress;
 
   /// The row is the song playing now: accent title and dancing bars.
   final bool active;
@@ -220,14 +236,21 @@ class MediaRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cover = Artwork(art: art, radius: 8);
     return Pressable(
       onTap: onTap,
+      onLongPress: onLongPress,
       tilt: 0.04,
       child: SizedBox(
         height: 54,
         child: Row(
           children: [
-            SizedBox.square(dimension: 54, child: Artwork(art: art)),
+            SizedBox.square(
+              dimension: 54,
+              child: heroTag == null
+                  ? cover
+                  : Hero(tag: heroTag!, child: cover),
+            ),
             const SizedBox(width: 17),
             Expanded(
               child: Column(

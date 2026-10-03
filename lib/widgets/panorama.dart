@@ -5,8 +5,8 @@ import '../theme/tokens.dart';
 
 /// One Metro panorama page that scrolls vertically like an XMB column: a
 /// large lowercase title, a header (cover, tiles…), then a lazily built
-/// [body] sliver that runs down through the bar. The shell fades whatever
-/// passes under and below the bar.
+/// [body] sliver. The column ends just above the XMB bar: content fades
+/// out crisply there and under the status bar, never behind the icons.
 class PanoramaPage extends StatefulWidget {
   const PanoramaPage({
     super.key,
@@ -41,8 +41,8 @@ class PanoramaPage extends StatefulWidget {
   final Widget? backdrop;
   final double backdropHeight;
 
-  /// Space at the end so the last items can scroll up past the bar.
-  static const endSpace = MsSizes.barFromBottom + MsSizes.barHeight / 2 + 24;
+  /// Space at the end so the last item can rise clear of the soft edge.
+  static const endSpace = MsSizes.columnFade + 8;
 
   @override
   State<PanoramaPage> createState() => _PanoramaPageState();
@@ -109,44 +109,48 @@ class _PanoramaPageState extends State<PanoramaPage> {
           ],
         );
 
+        final statusBar = MediaQuery.paddingOf(context).top;
         return _ScrollTick(
           ticks: _scrolled,
-          child: CustomScrollView(
-            key: PageStorageKey('page-${widget.id}'),
-            controller: _controller,
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            slivers: [
-              SliverToBoxAdapter(
-                child: widget.backdrop == null
-                    ? Padding(
-                        padding: padding.copyWith(top: widget.titleTop),
-                        child: top,
-                      )
-                    : Stack(
-                        children: [
-                          SizedBox(
-                            height: widget.backdropHeight,
-                            width: double.infinity,
-                            child: widget.backdrop,
-                          ),
-                          Padding(
-                            padding: padding.copyWith(top: widget.titleTop),
-                            child: top,
-                          ),
-                        ],
-                      ),
+          child: _EdgeFade(
+            top: statusBar,
+            child: CustomScrollView(
+              key: PageStorageKey('page-${widget.id}'),
+              controller: _controller,
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
               ),
-              if (widget.body != null)
-                SliverPadding(
-                  padding: padding.copyWith(top: widget.bodyGap),
-                  sliver: widget.body,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: widget.backdrop == null
+                      ? Padding(
+                          padding: padding.copyWith(top: widget.titleTop),
+                          child: top,
+                        )
+                      : Stack(
+                          children: [
+                            SizedBox(
+                              height: widget.backdropHeight,
+                              width: double.infinity,
+                              child: widget.backdrop,
+                            ),
+                            Padding(
+                              padding: padding.copyWith(top: widget.titleTop),
+                              child: top,
+                            ),
+                          ],
+                        ),
                 ),
-              const SliverToBoxAdapter(
-                child: SizedBox(height: PanoramaPage.endSpace),
-              ),
-            ],
+                if (widget.body != null)
+                  SliverPadding(
+                    padding: padding.copyWith(top: widget.bodyGap),
+                    sliver: widget.body,
+                  ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: PanoramaPage.endSpace),
+                ),
+              ],
+            ),
           ),
         );
       },
@@ -178,40 +182,36 @@ class ScrollToTop extends InheritedWidget {
       oldWidget.requests != requests;
 }
 
-/// Fades the XMB column where it runs under and below the bar: content is
-/// hidden behind the bar's band and washed out beneath it, as in the
-/// design. A single overlay drawn once for all pages.
-class ColumnFade extends StatelessWidget {
-  const ColumnFade({super.key, this.color = MsColors.background});
+/// Fades a page's column out at its two ends: under the status bar and
+/// where it meets the XMB bar. A mask, so whatever is behind (white, or the
+/// album's colours) shows through cleanly.
+class _EdgeFade extends StatelessWidget {
+  const _EdgeFade({required this.top, required this.child});
 
-  /// The page colour under the bar (white, or the album wash on Playing).
-  final Color color;
+  final double top;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    const bar = MsSizes.barFromBottom;
-    const half = MsSizes.barHeight / 2;
-    Color a(double alpha) => color.withValues(alpha: alpha);
-    return IgnorePointer(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: SizedBox(
-          height: bar + half + 18,
-          width: double.infinity,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                // From the top of the fade: soft edge, solid behind the
-                // icons and labels, then a translucent wash below.
-                stops: const [0, 0.08, 0.46, 0.53, 1],
-                colors: [a(0), a(0.95), a(0.95), a(0.55), a(0.6)],
-              ),
-            ),
-          ),
-        ),
-      ),
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (rect) {
+        final h = rect.height;
+        final topEnd = ((top + 6) / h).clamp(0.0, 0.2);
+        final bottomStart = (1 - MsSizes.columnFade / h).clamp(0.5, 1.0);
+        return LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [topEnd * 0.4, topEnd, bottomStart, 1],
+          colors: const [
+            Color(0x00000000),
+            Color(0xFF000000),
+            Color(0xFF000000),
+            Color(0x00000000),
+          ],
+        ).createShader(rect);
+      },
+      child: child,
     );
   }
 }
@@ -237,10 +237,9 @@ class SectionTitle extends StatelessWidget {
   }
 }
 
-/// The XMB column's focus: a list row is fully visible only in the two-row
-/// band just above the bar; rows that scroll up past it fade away, so the
-/// column never shows more than two songs at once. (Below the bar, the
-/// shell's wash takes over.)
+/// The XMB column's focus: a list row is at full strength only in the
+/// two-row band just above the bar; rows that scroll up past it recede, so
+/// the column never puts more than two songs forward at once.
 class ColumnFocus extends StatefulWidget {
   const ColumnFocus({super.key, required this.child});
 
@@ -288,12 +287,11 @@ class _ColumnFocusState extends State<ColumnFocus> {
     if (box == null || !box.attached || !box.hasSize) return;
     final centre = box.localToGlobal(Offset(0, box.size.height / 2)).dy;
     final height = MediaQuery.sizeOf(context).height;
-    // Where the bar's fade begins; the focus band sits right above it.
-    final zoneBottom =
-        height - MsSizes.barFromBottom - MsSizes.barHeight / 2 - 18;
+    // Where the column's soft edge begins; the focus band sits right above.
+    final zoneBottom = height - MsSizes.columnBottom - MsSizes.columnFade * 0.5;
     final bandTop = zoneBottom - ColumnFocus.band;
-    final past = ((bandTop - centre) / 30).clamp(0.0, 1.0);
-    final next = 1 - 0.88 * Curves.easeOut.transform(past);
+    final past = ((bandTop - centre) / 40).clamp(0.0, 1.0);
+    final next = 1 - 0.62 * Curves.easeOut.transform(past);
     if ((next - _opacity.value).abs() > 0.01) _opacity.value = next;
   }
 

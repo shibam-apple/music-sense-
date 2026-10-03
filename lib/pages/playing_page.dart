@@ -160,13 +160,9 @@ class PlayingPage extends StatelessWidget {
       ),
     );
 
-    // The page takes the album's colours, like Apple Music's player.
-    return Stack(
-      children: [
-        const Positioned.fill(child: AlbumBackground()),
-        page,
-      ],
-    );
+    // The album's colours behind it are drawn by the shell, across the
+    // whole screen, like Apple Music's player.
+    return page;
   }
 
   Duration _untilMix(PlaybackController player) {

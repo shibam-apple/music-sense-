@@ -207,4 +207,8 @@ class LibraryScope extends InheritedNotifier<LibraryController> {
 
   static LibraryController of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<LibraryScope>()!.notifier!;
+
+  /// For callbacks: no rebuild when the library changes.
+  static LibraryController read(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<LibraryScope>()!.notifier!;
 }

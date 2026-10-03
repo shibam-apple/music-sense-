@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
+import 'album_page.dart';
 
 /// 4 · New — new releases, listening stats and the yearly replay.
 class NewPage extends StatelessWidget {
@@ -37,6 +38,9 @@ class NewPage extends StatelessWidget {
       if (list.isNotEmpty) player.playTracks(list);
     }
 
+    void open(Album a) =>
+        AlbumPage.open(context, a, AlbumPage.tagFor(a, 'new'));
+
     final hero = albums.isNotEmpty ? albums.first : null;
     final second = albums.length > 1 ? albums[1] : null;
     final latestSingle = singles.isNotEmpty
@@ -58,7 +62,9 @@ class NewPage extends StatelessWidget {
                   art: hero?.artwork ?? const PaintedArtwork(ArtStyle.lake),
                   label: hero?.title ?? '',
                   caption: hero == null ? null : 'New album · ${hero.artist}',
-                  onTap: hero == null ? null : () => play(hero.tracks),
+                  heroTag: hero == null ? null : AlbumPage.tagFor(hero, 'new'),
+                  onTap: hero == null ? null : () => open(hero),
+                  onLongPress: hero == null ? null : () => play(hero.tracks),
                 ),
               ),
             ]),
@@ -77,7 +83,11 @@ class NewPage extends StatelessWidget {
                 art: second?.artwork ?? const PaintedArtwork(ArtStyle.dust),
                 label: second?.title ?? '',
                 caption: second?.artist,
-                onTap: second == null ? null : () => play(second.tracks),
+                heroTag: second == null
+                    ? null
+                    : AlbumPage.tagFor(second, 'new'),
+                onTap: second == null ? null : () => open(second),
+                onLongPress: second == null ? null : () => play(second.tracks),
               ),
             ]),
           ]),
@@ -138,7 +148,9 @@ class NewPage extends StatelessWidget {
             art: a.artwork,
             label: a.title,
             caption: a.artist,
-            onTap: () => play(a.tracks),
+            heroTag: AlbumPage.tagFor(a, 'new'),
+            onTap: () => open(a),
+            onLongPress: () => play(a.tracks),
           );
         },
       ),

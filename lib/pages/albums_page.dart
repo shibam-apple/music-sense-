@@ -6,6 +6,7 @@ import '../playback/playback_controller.dart';
 import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
+import 'album_page.dart';
 
 /// 2 · Albums — the hero album with its stats, then every album.
 class AlbumsPage extends StatelessWidget {
@@ -17,6 +18,8 @@ class AlbumsPage extends StatelessWidget {
     final player = PlayerScope.of(context);
     final albums = library.albums;
     void play(Album a) => player.playTracks(a.tracks);
+    void open(Album a, String place) =>
+        AlbumPage.open(context, a, AlbumPage.tagFor(a, place));
 
     if (albums.isEmpty) {
       return const PanoramaPage(id: 'albums', title: 'albums');
@@ -38,7 +41,9 @@ class AlbumsPage extends StatelessWidget {
                   label: hero.title,
                   caption: hero.artist,
                   selected: true,
-                  onTap: () => play(hero),
+                  heroTag: AlbumPage.tagFor(hero, 'albums-hero'),
+                  onTap: () => open(hero, 'albums-hero'),
+                  onLongPress: () => play(hero),
                 ),
               ),
             ]),
@@ -68,7 +73,9 @@ class AlbumsPage extends StatelessWidget {
             title: album.title,
             subtitle: '${album.artist} · ${album.songCount} songs',
             active: player.track != null && album.tracks.contains(player.track),
-            onTap: () => play(album),
+            heroTag: AlbumPage.tagFor(album, 'albums'),
+            onTap: () => open(album, 'albums'),
+            onLongPress: () => play(album),
           );
           return ColumnFocus(
             child: i < 6 ? Reveal(order: 3 + i, child: row) : row,

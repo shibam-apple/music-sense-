@@ -9,6 +9,7 @@ import '../widgets/ambient.dart';
 import '../widgets/artwork.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
+import 'album_page.dart';
 import 'music_page.dart' show SongList;
 
 /// 6 · Artist — the current song's artist: full-bleed moving cover,
@@ -87,6 +88,16 @@ class ArtistPage extends StatelessWidget {
                     ? 'Single · 1 song'
                     : 'Album · ${release.songCount} songs',
                 onAdd: () => player.playTracks(release?.tracks ?? [latest]),
+                heroTag: release == null
+                    ? null
+                    : AlbumPage.tagFor(release, 'artist'),
+                onOpen: release == null
+                    ? null
+                    : () => AlbumPage.open(
+                        context,
+                        release,
+                        AlbumPage.tagFor(release, 'artist'),
+                      ),
               ),
             ),
         ],
@@ -164,10 +175,21 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ClipRect(
+    // A Metro panel inset from the page edges, so neighbouring pages never
+    // meet it at a seam; it melts into whatever is behind it.
+    final top = MediaQuery.paddingOf(context).top;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, top + 8, 12, 0),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (rect) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          stops: [0.5, 0.94],
+          colors: [Color(0xFF000000), Color(0x00000000)],
+        ).createShader(rect),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
           child: AnimatedBuilder(
             animation: _drift,
             builder: (context, child) {
@@ -188,17 +210,7 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
             ),
           ),
         ),
-        const DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: [0.55, 0.92],
-              colors: [Color(0x00FFFFFF), MsColors.background],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -348,55 +360,71 @@ class _ReleaseCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onAdd,
+    this.onOpen,
+    this.heroTag,
   });
 
   final ArtworkRef art;
   final String date, title, subtitle;
   final VoidCallback onAdd;
+  final VoidCallback? onOpen;
+  final Object? heroTag;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: MsColors.tileLight,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          SizedBox.square(
-            dimension: 64,
-            child: Glint(
-              delay: const Duration(seconds: 4),
-              child: Artwork(art: art),
+    final cover = Glint(
+      delay: const Duration(seconds: 4),
+      child: Artwork(art: art),
+    );
+    return Pressable(
+      tilt: 0.05,
+      onTap: onOpen,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: MsColors.tileLight,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 64,
+              child: heroTag == null
+                  ? cover
+                  : Hero(tag: heroTag!, child: cover),
             ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (date.isNotEmpty)
-                  Text(date, style: MsText.rowSubtitle.copyWith(fontSize: 11)),
-                const SizedBox(height: 2),
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: MsText.rowTitle.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 2),
-                Text(subtitle, style: MsText.rowSubtitle),
-              ],
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (date.isNotEmpty)
+                    Text(
+                      date,
+                      style: MsText.rowSubtitle.copyWith(fontSize: 11),
+                    ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: MsText.rowTitle.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: MsText.rowSubtitle),
+                ],
+              ),
             ),
-          ),
-          _CircleButton(
-            icon: LucideIcons.plus300,
-            label: 'Play $title',
-            size: 32,
-            onTap: onAdd,
-          ),
-        ],
+            _CircleButton(
+              icon: LucideIcons.plus300,
+              label: 'Play $title',
+              size: 32,
+              onTap: onAdd,
+            ),
+          ],
+        ),
       ),
     );
   }

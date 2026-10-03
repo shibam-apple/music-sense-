@@ -32,12 +32,22 @@ abstract final class MsSizes {
   static const titleTop = 92.0;
 
   /// Gap between Metro tiles.
-  static const tileGap = 7.0;
-  static const tileRadius = 6.0;
+  static const tileGap = 8.0;
+  static const tileRadius = 10.0;
 
   /// Vertical centre of the XMB icon bar, measured from the bottom.
   static const barFromBottom = 168.0;
   static const barHeight = 96.0;
+
+  /// Where the pages' column ends, measured from the bottom: just above
+  /// the XMB icons. Nothing scrolls behind the bar.
+  static const columnBottom = barFromBottom + 26;
+
+  /// Height of the soft edge where the column meets the bar.
+  static const columnFade = 34.0;
+
+  /// The dock under the bar, measured from the bottom to its top edge.
+  static const dockTop = barFromBottom - barHeight / 2 - 6;
 
   /// Horizontal distance between XMB icons and the x of the active slot.
   static const barSpacing = 65.0;

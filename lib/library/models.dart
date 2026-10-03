@@ -1,3 +1,5 @@
+import 'names.dart';
+
 /// Painted artwork styles used by the demo library and as fallbacks.
 enum ArtStyle { futuristic, lake, dust }
 
@@ -51,6 +53,11 @@ class Track {
   final Duration duration;
   final int? year;
   final DateTime? added;
+
+  /// The line under the title: the artist, or the album (often the folder
+  /// it came from) when the file has no artist tag.
+  String get byline =>
+      artist != unknownArtist ? artist : (album ?? unknownArtist);
 
   /// Unique across sources; used as the analysis cache key.
   String get key => '$source:$id';

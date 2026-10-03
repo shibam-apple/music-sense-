@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../library/models.dart';
+import '../library/names.dart';
 import 'music_source.dart';
 
 /// Songs stored on the device, read from Android's media library.
@@ -29,8 +30,11 @@ class LocalSource extends MusicSource {
 
   Track _track(Map r) {
     final id = (r['id'] as num).toInt();
-    final title = (r['title'] as String?) ?? 'Unknown';
-    final artist = _clean(r['artist'] as String?) ?? 'Unknown artist';
+    final (title, tagged) = splitArtist(
+      tidyTitle((r['title'] as String?) ?? 'Unknown'),
+      _clean(r['artist'] as String?),
+    );
+    final artist = tagged ?? unknownArtist;
     final year = (r['year'] as num?)?.toInt();
     final added = (r['dateAdded'] as num?)?.toInt();
     return Track(

@@ -217,7 +217,7 @@ class _LocalState extends State<_Local> {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = _Painted(widget.fallback);
+    final fallback = _Blank(widget.mediaId);
     final bytes = _bytes;
     if (bytes == null) return fallback;
     return LayoutBuilder(
@@ -237,6 +237,50 @@ class _LocalState extends State<_Local> {
           ),
         );
       },
+    );
+  }
+}
+
+/// The cover for a file with none: a clean gradient and a note, its
+/// colours picked from the song so each one is recognisable.
+class _Blank extends StatelessWidget {
+  const _Blank(this.seed);
+
+  final int seed;
+
+  static const _pairs = [
+    (Color(0xFF9D96FF), Color(0xFF5A4BD6)),
+    (Color(0xFF86CFFA), Color(0xFF3A78D6)),
+    (Color(0xFF8FE3C8), Color(0xFF2A978A)),
+    (Color(0xFFFFB991), Color(0xFFE0605A)),
+    (Color(0xFFFFD885), Color(0xFFE5923A)),
+    (Color(0xFFF7A9CB), Color(0xFFBE4E8D)),
+    (Color(0xFFC4CCD8), Color(0xFF68738A)),
+    (Color(0xFFD2C2FF), Color(0xFF8063E6)),
+  ];
+
+  static (Color, Color) colors(int seed) => _pairs[seed.abs() % _pairs.length];
+
+  @override
+  Widget build(BuildContext context) {
+    final (light, deep) = colors(seed);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [light, deep],
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, c) => Center(
+          child: Icon(
+            Icons.music_note_rounded,
+            size: c.maxWidth * 0.36,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -323,20 +367,21 @@ abstract final class ArtworkPalette {
     final known = peekScheme(art);
     if (known != null) return known;
     Uint8List? bytes;
-    var fallback = ArtStyle.futuristic;
+    var fallback = _painted[ArtStyle.futuristic]!;
     try {
       switch (art) {
         case NetworkArtwork(:final url):
           final data = await NetworkAssetBundle(Uri.parse(url)).load(url);
           bytes = data.buffer.asUint8List();
-        case LocalArtwork(:final mediaId, fallback: final f):
-          fallback = f;
+        case LocalArtwork(:final mediaId):
+          final (light, deep) = _Blank.colors(mediaId);
+          fallback = (deep, light);
           bytes = await LocalCovers.load(mediaId);
         case PaintedArtwork():
           break;
       }
     } catch (_) {}
-    final scheme = bytes == null ? _painted[fallback]! : await _scheme(bytes);
+    final scheme = bytes == null ? fallback : await _scheme(bytes);
     return _cache[_key(art)] = scheme;
   }
 
