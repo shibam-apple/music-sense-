@@ -39,7 +39,8 @@ class InnerTubeClient {
     String endpoint,
     Map<String, Object> body,
   ) async {
-    final response = await _http.post(
+    // A dropped connection (common on mobile networks) gets one retry.
+    Future<http.Response> send() => _http.post(
       Uri.parse('$_base/$endpoint?prettyPrint=false'),
       headers: {
         'Content-Type': 'application/json',
@@ -54,6 +55,13 @@ class InnerTubeClient {
       },
       body: jsonEncode({'context': _context, ...body}),
     );
+    http.Response response;
+    try {
+      response = await send();
+    } on http.ClientException {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      response = await send();
+    }
     if (response.statusCode != 200) {
       final body = response.body;
       throw InnerTubeException(
