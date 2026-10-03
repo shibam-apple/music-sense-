@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
+import 'ambient.dart';
 
 class XmbItem {
   const XmbItem(this.icon, this.label);
@@ -56,28 +57,55 @@ class _XmbBarState extends State<XmbBar> with SingleTickerProviderStateMixin {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
+          // Waves and glow take the cover's colour and swell on the beat.
           Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(
-                painter: _WavePainter(drift: _drift, page: widget.page),
-              ),
-            ),
-          ),
-          // Glow stays in the slot; icons pass through it.
-          Positioned(
-            left: slot - 46,
-            top: mid - 50,
-            width: 92,
-            height: 92,
-            child: const IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [Color(0x426F56F8), Color(0x006F56F8)],
-                  ),
-                ),
-              ),
+            child: BeatPulse(
+              builder: (context, pulse, _) {
+                final accent = Accent.of(context);
+                final wave = Color.lerp(MsColors.wave, accent, 0.35)!;
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: CustomPaint(
+                          painter: _WavePainter(
+                            drift: _drift,
+                            page: widget.page,
+                            color: wave,
+                            pulse: pulse,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Glow stays in the slot; icons pass through it.
+                    Positioned(
+                      left: slot - 48,
+                      top: mid - 52,
+                      width: 96,
+                      height: 96,
+                      child: IgnorePointer(
+                        child: Transform.scale(
+                          scale: 1 + 0.06 * pulse,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  Color.lerp(MsColors.accent, accent, 0.4)!
+                                      .withValues(alpha: 0.24 + 0.08 * pulse),
+                                  Color.lerp(MsColors.accent, accent, 0.4)!
+                                      .withValues(alpha: 0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           AnimatedBuilder(
@@ -140,27 +168,37 @@ class _XmbBarState extends State<XmbBar> with SingleTickerProviderStateMixin {
 /// Two thin lavender waves that cross behind the icons, as on the XMB.
 /// They drift slowly over time and shift with the page.
 class _WavePainter extends CustomPainter {
-  _WavePainter({required this.drift, required this.page})
-      : super(repaint: Listenable.merge([drift, page]));
+  _WavePainter({
+    required this.drift,
+    required this.page,
+    required this.color,
+    required this.pulse,
+  }) : super(repaint: Listenable.merge([drift, page]));
 
   final Animation<double> drift;
   final Animation<double> page;
+  final Color color;
+  final double pulse;
 
   @override
   void paint(Canvas canvas, Size size) {
     final t = drift.value * math.pi * 2;
     final shift = page.value * 0.55;
     final mid = size.height / 2;
+    final swell = 1 + 0.18 * pulse;
+
+    double y(double x, double amplitude, double length, double phase, double offset) =>
+        mid +
+        offset +
+        swell * amplitude * math.sin(x / length * math.pi * 2 + phase) +
+        swell * amplitude * 0.25 * math.sin(x / (length * 0.47) - phase * 1.7);
 
     void wave(double amplitude, double length, double phase, double offset,
         Color color, double stroke) {
       final path = Path();
       for (var x = -4.0; x <= size.width + 4; x += 4) {
-        final y = mid +
-            offset +
-            amplitude * math.sin(x / length * math.pi * 2 + phase) +
-            amplitude * 0.25 * math.sin(x / (length * 0.47) - phase * 1.7);
-        x == -4 ? path.moveTo(x, y) : path.lineTo(x, y);
+        final py = y(x, amplitude, length, phase, offset);
+        x == -4 ? path.moveTo(x, py) : path.lineTo(x, py);
       }
       canvas.drawPath(
         path,
@@ -176,11 +214,31 @@ class _WavePainter extends CustomPainter {
       );
     }
 
-    wave(15, size.width * 1.3, t + shift + 2.6, 2, MsColors.wave, 1.2);
-    wave(11, size.width * 1.05, -t * 0.8 - shift + 0.4, 8,
-        MsColors.wave.withValues(alpha: 0.75), 1.0);
+    final a = (15.0, size.width * 1.3, t + shift + 2.6, 2.0);
+    final b = (11.0, size.width * 1.05, -t * 0.8 - shift + 0.4, 8.0);
+    wave(a.$1, a.$2, a.$3, a.$4, color, 1.2);
+    wave(b.$1, b.$2, b.$3, b.$4, color.withValues(alpha: 0.75), 1.0);
+
+    // PS3-style sparkles gliding along the first wave.
+    for (var i = 0; i < 5; i++) {
+      final along = ((drift.value * (1.6 + i * 0.37) + i * 0.21) % 1.0);
+      final x = along * size.width;
+      final py = y(x, a.$1, a.$2, a.$3, a.$4);
+      final twinkle = 0.5 + 0.5 * math.sin(t * 7 + i * 2.1);
+      final r = 1.1 + 0.9 * twinkle + 1.2 * pulse;
+      final c = Offset(x, py);
+      canvas.drawCircle(
+        c,
+        r * 3.2,
+        Paint()
+          ..color = color.withValues(alpha: 0.18 * twinkle)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+      );
+      canvas.drawCircle(c, r * 0.7, Paint()..color = Colors.white.withValues(alpha: 0.9 * twinkle));
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _WavePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _WavePainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.pulse != pulse;
 }

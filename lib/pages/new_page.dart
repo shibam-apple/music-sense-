@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../data/library.dart';
+import '../library/library.dart';
+import '../library/models.dart';
+import '../playback/playback_controller.dart';
+import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
 
@@ -11,42 +14,87 @@ class NewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final library = LibraryScope.of(context);
+    final player = PlayerScope.of(context);
     final year = DateTime.now().year;
+
+    // Albums ordered by their newest song.
+    DateTime newest(Album a) => a.tracks
+        .map((t) => t.added ?? DateTime(1970))
+        .reduce((x, y) => x.isAfter(y) ? x : y);
+    final albums = library.isDemo
+        ? library.albums
+        : ([...library.albums]..sort((a, b) => newest(b).compareTo(newest(a))));
+    final singles = library.singles;
+    final week = library.addedSince(DateTime.now().subtract(const Duration(days: 7)));
+    final hours = library.isDemo ? 42 : library.stats.hoursThisMonth.round();
+    final replay = library.stats.topOf(library.tracks);
+
+    void play(List<Track> list) {
+      if (list.isNotEmpty) player.playTracks(list);
+    }
+
+    final hero = albums.isNotEmpty ? albums.first : null;
+    final second = albums.length > 1 ? albums[1] : null;
+    final latestSingle = singles.isNotEmpty ? singles.first : library.recent.firstOrNull;
 
     return PanoramaPage(
       title: 'new',
       content: TileGrid(rows: [
-        const TileRow(height: 1.64, [
+        TileRow(height: 1.64, [
           TileColumn(span: 3, [
-            MetroTile(
-              art: ArtStyle.lake,
-              label: 'Tidelines',
-              caption: 'New album · Mara Eon',
+            Glint(
+              delay: const Duration(seconds: 3),
+              child: MetroTile(
+                art: hero?.artwork ?? const PaintedArtwork(ArtStyle.lake),
+                label: hero?.title ?? '',
+                caption: hero == null ? null : 'New album · ${hero.artist}',
+                onTap: hero == null ? null : () => play(hero.tracks),
+              ),
             ),
           ]),
         ]),
-        const TileRow(height: 1.5, [
+        TileRow(height: 1.5, [
           TileColumn(span: 1.5, [
             MetroTile(
               tone: TileTone.accent,
-              number: '42',
+              number: '$hours',
               label: 'hours played',
               caption: 'this month',
             ),
           ]),
           TileColumn(span: 1.5, [
             MetroTile(
-              art: ArtStyle.dust,
-              label: 'Glass Coast',
-              caption: 'Kiro Vale',
+              art: second?.artwork ?? const PaintedArtwork(ArtStyle.dust),
+              label: second?.title ?? '',
+              caption: second?.artist,
+              onTap: second == null ? null : () => play(second.tracks),
             ),
           ]),
         ]),
-        const TileRow([
-          TileColumn([MetroTile(number: '6', label: 'Singles')]),
-          TileColumn([MetroTile(art: ArtStyle.futuristic)]),
+        TileRow([
           TileColumn([
-            MetroTile(tone: TileTone.light, number: '2', label: 'Pre-saves'),
+            MetroTile(
+              number: library.isDemo ? '6' : '${singles.length}',
+              label: 'Singles',
+              onTap: () => play(singles),
+            ),
+          ]),
+          TileColumn([
+            MetroTile(
+              art: latestSingle?.artwork ?? const PaintedArtwork(ArtStyle.futuristic),
+              onTap: latestSingle == null ? null : () => play([latestSingle]),
+            ),
+          ]),
+          TileColumn([
+            library.isDemo
+                ? const MetroTile(tone: TileTone.light, number: '2', label: 'Pre-saves')
+                : MetroTile(
+                    tone: TileTone.light,
+                    number: '${week.length}',
+                    label: 'This week',
+                    onTap: () => play(week),
+                  ),
           ]),
         ]),
         TileRow([
@@ -55,14 +103,15 @@ class NewPage extends StatelessWidget {
               icon: LucideIcons.loaderPinwheel300,
               label: 'Your $year Replay',
               caption: 'Updated weekly',
+              onTap: () => play(replay.isNotEmpty ? replay : library.recent),
             ),
           ]),
         ]),
       ]),
-      below: const TileGrid(rows: [
+      below: TileGrid(rows: [
         TileRow([
-          TileColumn(span: 1.5, [MetroTile(art: ArtStyle.futuristic)]),
-          TileColumn(span: 1.5, [MetroTile(art: ArtStyle.lake)]),
+          for (final a in albums.skip(2).take(2))
+            TileColumn(span: 1.5, [MetroTile(art: a.artwork)]),
         ]),
       ]),
     );

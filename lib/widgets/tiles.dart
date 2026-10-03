@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../data/library.dart';
+import '../library/models.dart';
 import '../theme/tokens.dart';
+import 'ambient.dart';
 import 'artwork.dart';
 
 enum TileTone { dark, accent, light }
@@ -21,7 +22,7 @@ class MetroTile extends StatelessWidget {
   });
 
   final TileTone tone;
-  final ArtStyle? art;
+  final ArtworkRef? art;
   final String? number;
   final String? label;
   final String? caption;
@@ -56,7 +57,7 @@ class MetroTile extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             if (onArt) ...[
-              Artwork(style: art!),
+              Artwork(art: art!),
               if (label != null)
                 const DecoratedBox(
                   decoration: BoxDecoration(
@@ -198,9 +199,13 @@ class MediaRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.onTap,
+    this.active = false,
   });
 
-  final ArtStyle art;
+  final ArtworkRef art;
+
+  /// The row is the song playing now: accent title and dancing bars.
+  final bool active;
   final String title;
   final String subtitle;
   final VoidCallback? onTap;
@@ -213,7 +218,7 @@ class MediaRow extends StatelessWidget {
         height: 54,
         child: Row(
           children: [
-            SizedBox.square(dimension: 54, child: Artwork(style: art)),
+            SizedBox.square(dimension: 54, child: Artwork(art: art)),
             const SizedBox(width: 17),
             Expanded(
               child: Column(
@@ -223,7 +228,9 @@ class MediaRow extends StatelessWidget {
                   Text(title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: MsText.rowTitle),
+                      style: active
+                          ? MsText.rowTitle.copyWith(color: MsColors.accent)
+                          : MsText.rowTitle),
                   const SizedBox(height: 3),
                   Text(subtitle,
                       maxLines: 1,
@@ -232,6 +239,10 @@ class MediaRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (active) ...[
+              const SizedBox(width: 12),
+              const PlayingBars(size: 13),
+            ],
           ],
         ),
       ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../data/library.dart';
+import '../library/library.dart';
+import '../library/models.dart';
+import '../playback/playback_controller.dart';
+import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
 
@@ -10,8 +13,15 @@ class AlbumsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const hero = MockLibrary.heroAlbum;
-    final albums = MockLibrary.albums;
+    final library = LibraryScope.of(context);
+    final player = PlayerScope.of(context);
+    final albums = library.albums;
+    void play(Album a) => player.playTracks(a.tracks);
+
+    if (albums.isEmpty) {
+      return const PanoramaPage(title: 'albums', content: SizedBox());
+    }
+    final hero = albums.first;
 
     return PanoramaPage(
       title: 'albums',
@@ -21,11 +31,15 @@ class AlbumsPage extends StatelessWidget {
           TileGrid(rows: [
             TileRow(height: 2, [
               TileColumn(span: 2, [
-                MetroTile(
-                  art: hero.art,
-                  label: hero.title,
-                  caption: hero.artist,
-                  selected: true,
+                Glint(
+                  delay: const Duration(seconds: 2),
+                  child: MetroTile(
+                    art: hero.artwork,
+                    label: hero.title,
+                    caption: hero.artist,
+                    selected: true,
+                    onTap: () => play(hero),
+                  ),
                 ),
               ]),
               TileColumn([
@@ -39,19 +53,20 @@ class AlbumsPage extends StatelessWidget {
             ]),
           ]),
           const SizedBox(height: 16),
-          for (final (i, album) in albums.take(4).indexed) ...[
+          for (final (i, album) in albums.skip(1).take(4).indexed) ...[
             if (i > 0) const SizedBox(height: 16),
-            Reveal(order: 3 + i, child: _albumRow(album)),
+            Reveal(order: 3 + i, child: _albumRow(album, () => play(album))),
           ],
         ],
       ),
-      below: _albumRow(albums.last),
+      below: albums.length > 5 ? _albumRow(albums[5], null) : null,
     );
   }
 
-  Widget _albumRow(Album album) => MediaRow(
-        art: album.art,
+  Widget _albumRow(Album album, VoidCallback? onTap) => MediaRow(
+        art: album.artwork,
         title: album.title,
         subtitle: '${album.artist} · ${album.songCount} songs',
+        onTap: onTap,
       );
 }

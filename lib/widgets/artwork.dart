@@ -2,23 +2,73 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../data/library.dart';
+import '../library/models.dart';
+import '../sources/local_source.dart';
 import '../theme/tokens.dart';
 
-/// Album artwork. Paints one of the mock styles at any size so the UI stays
-/// sharp without bundled photos; real covers will replace it.
+/// A cover: painted, from the network, or embedded in a local file.
+/// Real covers fade in over their painted fallback.
 class Artwork extends StatelessWidget {
   const Artwork({
     super.key,
-    required this.style,
+    required this.art,
     this.radius = MsSizes.tileRadius,
     this.shadow = false,
+    this.shadowColor,
   });
 
-  final ArtStyle style;
+  Artwork.painted(ArtStyle style,
+      {Key? key, double radius = MsSizes.tileRadius, bool shadow = false})
+      : this(key: key, art: PaintedArtwork(style), radius: radius, shadow: shadow);
+
+  final ArtworkRef art;
   final double radius;
   final bool shadow;
+
+  /// Tints the shadow, e.g. with the cover's accent colour.
+  final Color? shadowColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final image = switch (art) {
+      PaintedArtwork(:final style) => _Painted(style),
+      NetworkArtwork(:final url) => _Network(url),
+      LocalArtwork(:final mediaId, :final fallback) => _Local(mediaId, fallback),
+    };
+    final clipped = ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: RepaintBoundary(child: image),
+    );
+    if (!shadow) return clipped;
+    final tint = shadowColor ?? MsColors.ink;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: tint.withValues(alpha: 0.10),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+          BoxShadow(
+            color: tint.withValues(alpha: 0.20),
+            blurRadius: 36,
+            spreadRadius: -4,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: clipped,
+    );
+  }
+}
+
+class _Painted extends StatelessWidget {
+  const _Painted(this.style);
+
+  final ArtStyle style;
 
   @override
   Widget build(BuildContext context) {
@@ -27,26 +77,184 @@ class Artwork extends StatelessWidget {
       ArtStyle.lake => const _LakePainter(),
       ArtStyle.dust => const _DustPainter(),
     };
-    final art = ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: RepaintBoundary(
-        child: CustomPaint(painter: painter, child: const SizedBox.expand()),
+    return CustomPaint(painter: painter, child: const SizedBox.expand());
+  }
+}
+
+class _Network extends StatelessWidget {
+  const _Network(this.url);
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _Painted(ArtStyle.values[url.hashCode.abs() % 3]);
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      frameBuilder: (context, child, frame, sync) => _FadeIn(
+        visible: sync || frame != null,
+        fallback: fallback,
+        child: child,
       ),
+      errorBuilder: (context, error, stack) => fallback,
     );
-    if (!shadow) return art;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x2E0B0A0F),
-            blurRadius: 24,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: art,
+  }
+}
+
+class _Local extends StatefulWidget {
+  const _Local(this.mediaId, this.fallback);
+
+  final int mediaId;
+  final ArtStyle fallback;
+
+  @override
+  State<_Local> createState() => _LocalState();
+}
+
+class _LocalState extends State<_Local> {
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    LocalCovers.load(widget.mediaId).then((bytes) {
+      if (mounted && bytes != null) setState(() => _bytes = bytes);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _Painted(widget.fallback);
+    final bytes = _bytes ?? LocalCovers.peek(widget.mediaId);
+    if (bytes == null) return fallback;
+    return _FadeIn(
+      visible: true,
+      fallback: fallback,
+      child: Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
     );
+  }
+}
+
+class _FadeIn extends StatelessWidget {
+  const _FadeIn({required this.visible, required this.fallback, required this.child});
+
+  final bool visible;
+  final Widget fallback;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        fallback,
+        AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: MsMotion.medium,
+          curve: MsMotion.curve,
+          child: child,
+        ),
+      ],
+    );
+  }
+}
+
+/// A small cache of local cover bytes so scrolling doesn't reload them.
+abstract final class LocalCovers {
+  static final _cache = <int, Uint8List?>{};
+  static final _order = <int>[];
+  static final _pending = <int, Future<Uint8List?>>{};
+  static const _max = 120;
+
+  static Uint8List? peek(int id) => _cache[id];
+
+  static Future<Uint8List?> load(int id) {
+    if (_cache.containsKey(id)) return Future.value(_cache[id]);
+    return _pending.putIfAbsent(id, () async {
+      Uint8List? bytes;
+      try {
+        bytes = await LocalSource.artwork(id);
+      } catch (_) {}
+      _cache[id] = bytes;
+      _order.add(id);
+      if (_order.length > _max) _cache.remove(_order.removeAt(0));
+      _pending.remove(id);
+      return bytes;
+    });
+  }
+}
+
+/// The accent colour of a cover: its most vivid colour, used to tint the
+/// wave, the glow and shadows so the whole page follows the music.
+abstract final class ArtworkPalette {
+  static const _painted = {
+    ArtStyle.futuristic: Color(0xFF8C7BFF),
+    ArtStyle.lake: Color(0xFFE0956A),
+    ArtStyle.dust: Color(0xFFD4893A),
+  };
+
+  static final _cache = <String, Color>{};
+
+  static Color? peek(ArtworkRef art) => switch (art) {
+        PaintedArtwork(:final style) => _painted[style],
+        _ => _cache[_key(art)],
+      };
+
+  static Future<Color> of(ArtworkRef art) async {
+    final known = peek(art);
+    if (known != null) return known;
+    Uint8List? bytes;
+    ArtStyle fallback = ArtStyle.futuristic;
+    try {
+      switch (art) {
+        case NetworkArtwork(:final url):
+          final data = await NetworkAssetBundle(Uri.parse(url)).load(url);
+          bytes = data.buffer.asUint8List();
+        case LocalArtwork(:final mediaId, fallback: final f):
+          fallback = f;
+          bytes = await LocalCovers.load(mediaId);
+        case PaintedArtwork():
+          break;
+      }
+    } catch (_) {}
+    final color = bytes == null ? _painted[fallback]! : await _vivid(bytes);
+    return _cache[_key(art)] = color;
+  }
+
+  static String _key(ArtworkRef art) => switch (art) {
+        NetworkArtwork(:final url) => url,
+        LocalArtwork(:final mediaId) => 'local:$mediaId',
+        PaintedArtwork(:final style) => style.name,
+      };
+
+  /// Decodes a 24 px thumbnail and picks the most saturated mid-bright
+  /// colour, weighted by how often it appears.
+  static Future<Color> _vivid(Uint8List bytes) async {
+    final codec = await ui.instantiateImageCodec(bytes, targetWidth: 24);
+    final frame = await codec.getNextFrame();
+    final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    frame.image.dispose();
+    if (data == null) return _painted[ArtStyle.futuristic]!;
+    final buckets = <int, (double, double, double, double)>{};
+    for (var i = 0; i + 3 < data.lengthInBytes; i += 4) {
+      final r = data.getUint8(i) / 255, g = data.getUint8(i + 1) / 255, b = data.getUint8(i + 2) / 255;
+      final hsv = HSVColor.fromColor(Color.fromARGB(255, (r * 255).round(), (g * 255).round(), (b * 255).round()));
+      if (hsv.value < 0.25 || hsv.value > 0.97) continue;
+      final weight = hsv.saturation * hsv.saturation;
+      final bucket = (hsv.hue / 30).floor();
+      final e = buckets[bucket] ?? (0, 0, 0, 0);
+      buckets[bucket] = (e.$1 + r * weight, e.$2 + g * weight, e.$3 + b * weight, e.$4 + weight);
+    }
+    if (buckets.isEmpty) return const Color(0xFF8C7BFF);
+    final best = buckets.values.reduce((a, b) => a.$4 >= b.$4 ? a : b);
+    if (best.$4 < 0.5) return const Color(0xFF8C7BFF);
+    final c = Color.fromARGB(255, (best.$1 / best.$4 * 255).round(), (best.$2 / best.$4 * 255).round(),
+        (best.$3 / best.$4 * 255).round());
+    // Keep it bright enough to read as a glow on white.
+    final hsv = HSVColor.fromColor(c);
+    return hsv.withValue(math.max(hsv.value, 0.7)).withSaturation(math.max(hsv.saturation, 0.45)).toColor();
   }
 }
 

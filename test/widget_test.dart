@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:music_sense/library/library.dart';
 import 'package:music_sense/main.dart';
+import 'package:music_sense/playback/demo_player.dart';
 
 /// The wave animates forever, so pumpAndSettle never returns; step frames.
 Future<void> settle(WidgetTester tester) async {
@@ -14,7 +16,10 @@ void main() {
     tester.view.physicalSize = const Size(390, 845);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const MusicSenseApp());
+    final library = LibraryController(const []);
+    final player = DemoPlayer(library.recent);
+    addTearDown(player.dispose);
+    await tester.pumpWidget(MusicSenseApp(player: player, library: library));
     await settle(tester);
   }
 
@@ -22,7 +27,7 @@ void main() {
       (tester) async {
     await pumpPhone(tester);
     expect(find.text('music collection'), findsOneWidget);
-    expect(find.text('NOW PLAYING'), findsOneWidget);
+    expect(find.text('BEAT SENSE · READY'), findsOneWidget);
     for (final label in ['Music', 'Albums', 'Featured', 'New', 'Playing']) {
       expect(find.text(label), findsWidgets);
     }

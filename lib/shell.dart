@@ -9,8 +9,9 @@ import 'pages/featured_page.dart';
 import 'pages/music_page.dart';
 import 'pages/new_page.dart';
 import 'pages/playing_page.dart';
-import 'state/player.dart';
+import 'playback/playback_controller.dart';
 import 'theme/tokens.dart';
+import 'widgets/ambient.dart';
 import 'widgets/xmb_bar.dart';
 
 /// The home screen: a Metro panorama of pages driven by one fractional page
@@ -44,8 +45,19 @@ class _PanoramaShellState extends State<PanoramaShell>
 
   static const _spring = SpringDescription(mass: 1, stiffness: 180, damping: 26);
 
-  late final _page = AnimationController.unbounded(vsync: this);
+  late final _page = AnimationController.unbounded(vsync: this)
+    ..addListener(_tickOnSnap);
   int _dragStartPage = 0;
+  int _snapped = 0;
+
+  /// A light haptic tick each time a new icon reaches the XMB slot.
+  void _tickOnSnap() {
+    final nearest = _page.value.round();
+    if (nearest != _snapped && (_page.value - nearest).abs() < 0.08) {
+      _snapped = nearest;
+      HapticFeedback.selectionClick();
+    }
+  }
 
   int get _last => _pages.length - 1;
 
@@ -96,7 +108,7 @@ class _PanoramaShellState extends State<PanoramaShell>
       case LogicalKeyboardKey.arrowLeft:
         _goTo(current - 1);
       case LogicalKeyboardKey.space:
-        PlayerScope.of(context).toggle();
+        PlayerScope.read(context).toggle();
       default:
         return KeyEventResult.ignored;
     }
@@ -117,6 +129,7 @@ class _PanoramaShellState extends State<PanoramaShell>
           onHorizontalDragEnd: _onDragEnd,
           child: Stack(
             children: [
+              const Positioned.fill(child: AmbientBackdrop()),
               AnimatedBuilder(
                 animation: _page,
                 builder: (context, _) {

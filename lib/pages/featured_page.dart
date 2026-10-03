@@ -1,77 +1,142 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../data/library.dart';
+import '../library/library.dart';
+import '../library/models.dart';
+import '../playback/playback_controller.dart';
+import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
 
-/// 3 · Featured — live tiles for radio, moods, mixes, charts and concerts.
+/// 3 · Featured — live tiles for radio, moods, mixes, charts and the
+/// song of the day.
 class FeaturedPage extends StatelessWidget {
   const FeaturedPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const PanoramaPage(
+    final library = LibraryScope.of(context);
+    final player = PlayerScope.of(context);
+    final tracks = library.recent;
+    final featured = player.track ?? (tracks.isEmpty ? null : tracks.first);
+    final chill = library.moodMix(Mood.chill);
+    final energy = library.moodMix(Mood.energy);
+    final charts = library.charts.isNotEmpty ? library.charts : tracks;
+    final daily = library.isDemo
+        ? tracks.where((t) => t.title == 'Alpine Lake').firstOrNull
+        : library.songOfTheDay;
+    final fresh = library.addedSince(DateTime.now().subtract(const Duration(days: 7)));
+    // Artist mixes plus the two mood mixes.
+    final mixes = library.isDemo ? 8 : library.mixArtists.length + 2;
+
+    void play(List<Track> list, {bool shuffle = false}) {
+      if (list.isEmpty) return;
+      player.playTracks(shuffle ? (List.of(list)..shuffle()) : list);
+    }
+
+    ArtworkRef art(List<Track> list, ArtStyle fallback) =>
+        list.isEmpty ? PaintedArtwork(fallback) : list.first.artwork;
+
+    return PanoramaPage(
       title: 'featured',
       content: TileGrid(rows: [
         TileRow(height: 2, [
           TileColumn(span: 2, [
-            MetroTile(
-              art: ArtStyle.futuristic,
-              label: 'Futuristic',
-              caption: 'Featured · Rufus Stewart',
+            Glint(
+              child: MetroTile(
+                art: featured?.artwork ?? const PaintedArtwork(ArtStyle.futuristic),
+                label: featured?.title ?? '',
+                caption: 'Featured · ${featured?.artist ?? ''}',
+                onTap: featured == null ? null : () => play([featured]),
+              ),
             ),
           ]),
           TileColumn([
+            // Radio: Beat Sense keeps picking and mixing related songs.
             MetroTile(
               tone: TileTone.accent,
               icon: LucideIcons.radio300,
               label: 'Radio',
-              caption: 'Live now',
+              caption: player.beatSenseEnabled ? 'Live now' : 'Beat Sense off',
+              onTap: featured == null ? null : () => play([featured]),
             ),
-            MetroTile(art: ArtStyle.lake, label: 'Chill'),
+            MetroTile(
+              art: art(chill, ArtStyle.lake),
+              label: 'Chill',
+              onTap: () => play(chill, shuffle: true),
+            ),
           ]),
         ]),
         TileRow([
-          TileColumn([MetroTile(number: '8', label: 'Mixes')]),
-          TileColumn([MetroTile(art: ArtStyle.dust, label: 'Energy')]),
+          TileColumn([
+            MetroTile(
+              number: '$mixes',
+              label: 'Mixes',
+              onTap: () => play(tracks, shuffle: true),
+            ),
+          ]),
+          TileColumn([
+            MetroTile(
+              art: art(energy, ArtStyle.dust),
+              label: 'Energy',
+              onTap: () => play(energy, shuffle: true),
+            ),
+          ]),
           TileColumn([
             MetroTile(
               tone: TileTone.light,
               icon: LucideIcons.chartNoAxesColumn300,
               label: 'Charts',
-              caption: 'Top 100',
+              caption: library.charts.isNotEmpty ? 'Top ${charts.length}' : 'Top 100',
+              onTap: () => play(charts),
             ),
           ]),
         ]),
         TileRow([
           TileColumn(span: 3, [
-            MetroTile(
-              tone: TileTone.light,
-              icon: LucideIcons.ticket300,
-              label: 'Concerts near you',
-              caption: 'Rufus Stewart · Sep 11',
-            ),
+            library.isDemo
+                ? const MetroTile(
+                    tone: TileTone.light,
+                    icon: LucideIcons.ticket300,
+                    label: 'Concerts near you',
+                    caption: 'Rufus Stewart · Sep 11',
+                  )
+                // No concert data yet on real libraries; this slot holds
+                // the Beat Sense switch instead.
+                : MetroTile(
+                    tone: TileTone.light,
+                    icon: LucideIcons.audioWaveform300,
+                    label: 'Beat Sense',
+                    caption: player.beatSenseEnabled
+                        ? 'On · mixing songs together'
+                        : 'Off · tap to mix songs together',
+                    onTap: () => player.beatSenseEnabled = !player.beatSenseEnabled,
+                  ),
           ]),
         ]),
         TileRow([
           TileColumn(span: 2, [
             MetroTile(
-              art: ArtStyle.lake,
-              label: 'Alpine Lake',
+              art: daily?.artwork ?? const PaintedArtwork(ArtStyle.lake),
+              label: daily?.title ?? '',
               caption: 'Song of the day',
+              onTap: daily == null ? null : () => play([daily]),
             ),
           ]),
           TileColumn([
-            MetroTile(tone: TileTone.accent, number: '+3', label: 'New'),
+            MetroTile(
+              tone: TileTone.accent,
+              number: library.isDemo ? '+3' : '+${fresh.length}',
+              label: 'New',
+              onTap: () => play(fresh),
+            ),
           ]),
         ]),
       ]),
       below: TileGrid(rows: [
         TileRow([
-          TileColumn([MetroTile(art: ArtStyle.dust)]),
-          TileColumn([MetroTile(art: ArtStyle.lake)]),
-          TileColumn([MetroTile(art: ArtStyle.futuristic)]),
+          for (final t in tracks.skip(1).take(3))
+            TileColumn([MetroTile(art: t.artwork)]),
         ]),
       ]),
     );
