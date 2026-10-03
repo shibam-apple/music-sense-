@@ -17,7 +17,14 @@ for i in $(seq 1 60); do
   sleep 2
 done
 
-adb push build/test_songs/beat_test_120.mp3 build/test_songs/beat_test_124.mp3 /sdcard/Music/
+# Storage can refuse writes for a while after boot; retry the copy.
+for i in $(seq 1 20); do
+  if adb push build/test_songs/beat_test_120.mp3 build/test_songs/beat_test_124.mp3 /sdcard/Music/; then
+    break
+  fi
+  [ "$i" = 20 ] && exit 1
+  sleep 3
+done
 for f in beat_test_120 beat_test_124; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
     -d "file:///sdcard/Music/$f.mp3" > /dev/null || true
