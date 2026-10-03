@@ -53,9 +53,11 @@ class YouTubeMusicSource extends MusicSource {
     final raw = await _api.charts();
     final direct = InnerTubeParser.songs(raw).map(_track).toList();
     if (direct.length >= 10) return direct;
-    final lists = InnerTubeParser.playlists(raw);
-    if (lists.isEmpty) return direct;
-    return playlist(lists.first);
+    // Prefer a songs chart over the music-videos one.
+    final items = InnerTubeParser.playlistItems(raw);
+    if (items.isEmpty) return direct;
+    final songs = items.where((e) => e.$2.toLowerCase().contains('song'));
+    return playlist((songs.isNotEmpty ? songs.first : items.first).$1);
   }
 
   Future<List<Track>> playlist(String browseId) async =>

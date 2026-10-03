@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart' show ProcessingState;
 
 import '../beat_sense/analysis/track_analysis.dart';
@@ -115,7 +116,20 @@ class MixEngine extends PlaybackController {
     final current = track!;
     final source = _sources[current.source];
     if (source == null) return;
-    await _active.load(current, await source.resolve(current), at: at);
+    try {
+      await _active.load(current, await source.resolve(current), at: at);
+    } catch (e) {
+      debugPrint('Could not play ${current.title}: $e');
+      if (generation != _generation) return;
+      message.value = source.id == 'ytm'
+          ? 'YouTube wouldn\'t stream "${current.title}". Skipping.'
+          : 'Couldn\'t play "${current.title}". Skipping.';
+      if (_index + 1 < _queue.length) {
+        _index++;
+        unawaited(_startCurrent());
+      }
+      return;
+    }
     if (generation != _generation) return;
     await _active.setLevel(1);
     _active.start();
@@ -164,7 +178,14 @@ class MixEngine extends PlaybackController {
     final plan = _planner.plan(current, nextAnalysis);
     final source = _sources[next.source]!;
     final deck = _incoming;
-    await deck.load(next, await source.resolve(next), at: plan.entryAt);
+    try {
+      await deck.load(next, await source.resolve(next), at: plan.entryAt);
+    } catch (e) {
+      debugPrint('Beat Sense: could not load ${next.title}: $e');
+      _status = const BeatSenseStatus(BeatSenseState.unavailable);
+      notifyListeners();
+      return;
+    }
     if (generation != _generation) return;
     deck.analysis = nextAnalysis;
     await deck.setLevel(0);

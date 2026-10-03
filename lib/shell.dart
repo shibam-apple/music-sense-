@@ -13,6 +13,7 @@ import 'playback/playback_controller.dart';
 import 'theme/tokens.dart';
 import 'widgets/ambient.dart';
 import 'widgets/panorama.dart';
+import 'widgets/toast.dart';
 import 'widgets/xmb_bar.dart';
 
 /// The home screen: a Metro panorama of pages driven by one fractional page
@@ -179,6 +180,12 @@ class _PanoramaShellState extends State<PanoramaShell>
                     },
                   ),
                   const Positioned.fill(child: ColumnFade()),
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: MsSizes.barFromBottom + MsSizes.barHeight / 2 + 8,
+                    child: PlayerToast(),
+                  ),
                   Positioned(
                     left: 0,
                     right: 0,

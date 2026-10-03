@@ -48,6 +48,9 @@ abstract class PlaybackController extends ChangeNotifier {
   /// Sense changes) so only the seek bar and timers rebuild as it moves.
   final positionListenable = ValueNotifier<Duration>(Duration.zero);
 
+  /// A short message when something couldn't play; shown as a toast.
+  final message = ValueNotifier<String?>(null);
+
   Track? get track;
   List<Track> get queue;
   int get index;
@@ -92,6 +95,7 @@ abstract class PlaybackController extends ChangeNotifier {
   @override
   void dispose() {
     positionListenable.dispose();
+    message.dispose();
     super.dispose();
   }
 

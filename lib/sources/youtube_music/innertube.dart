@@ -172,6 +172,27 @@ abstract final class InnerTubeParser {
     return out;
   }
 
+  /// Playlist links with their titles, in order.
+  static List<(String id, String title)> playlistItems(Object? json) {
+    final out = <(String, String)>[];
+    _walk(json, (key, node) {
+      if (key != 'musicTwoRowItemRenderer' &&
+          key != 'musicResponsiveListItemRenderer') {
+        return;
+      }
+      final id = _path(node, [
+        'navigationEndpoint',
+        'browseEndpoint',
+        'browseId',
+      ]);
+      if (id is! String || !id.startsWith('VL') || out.any((e) => e.$1 == id)) {
+        return;
+      }
+      out.add((id, _text(node['title']) ?? ''));
+    });
+    return out;
+  }
+
   /// Playlist browse ids (`VL…`) anywhere in [json], in order.
   static List<String> playlists(Object? json) {
     final out = <String>[];
