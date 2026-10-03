@@ -48,6 +48,9 @@ jobs:
       - id: tag
         run: echo "tag=build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
       - name: Publish test release
+        # Needs "Read and write" workflow permissions in the repo settings;
+        # the APKs are always available as the run's "apks" artifact too.
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
@@ -126,6 +129,7 @@ jobs:
             build/device-test.log
       - name: Attach screenshots to the test release
         if: success()
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.build.outputs.tag }}
