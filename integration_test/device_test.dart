@@ -13,7 +13,11 @@ import 'package:music_sense/sources/local_source.dart';
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<void> waitFor(bool Function() done, Duration limit, String what) async {
+  Future<void> waitFor(
+    bool Function() done,
+    Duration limit,
+    String what,
+  ) async {
     final end = DateTime.now().add(limit);
     while (!done()) {
       if (DateTime.now().isAfter(end)) fail('Timed out waiting for $what');
@@ -24,26 +28,35 @@ void main() {
   testWidgets('finds, analyses and mixes local songs', (tester) async {
     final local = LocalSource();
     expect(await local.open(), isTrue, reason: 'audio permission');
-    final songs = (await local.library())
-        .where((t) => t.title.startsWith('Beat Test'))
-        .toList()
-      ..sort((a, b) => a.title.compareTo(b.title));
+    final songs =
+        (await local.library())
+            .where((t) => t.title.startsWith('Beat Test'))
+            .toList()
+          ..sort((a, b) => a.title.compareTo(b.title));
     expect(songs.map((t) => t.title), ['Beat Test 120', 'Beat Test 124']);
     expect(songs.first.artist, 'Music Sense Lab');
-    expect(await LocalSource.artwork(int.parse(songs.first.id)), isNotNull,
-        reason: 'embedded cover');
+    expect(
+      await LocalSource.artwork(int.parse(songs.first.id)),
+      isNotNull,
+      reason: 'embedded cover',
+    );
 
     final analysis = AnalysisService({'local': local});
     final a = (await analysis.analyse(songs[0]))!;
     final b = (await analysis.analyse(songs[1]))!;
-    debugPrint('Beat Sense on device: ${a.bpm} BPM ${a.key}, ${b.bpm} BPM ${b.key}');
+    debugPrint(
+      'Beat Sense on device: ${a.bpm} BPM ${a.key}, ${b.bpm} BPM ${b.key}',
+    );
     expect(a.bpm, closeTo(120, 1));
     expect(b.bpm, closeTo(124, 1));
 
     final engine = MixEngine(sources: {'local': local}, analysis: analysis);
     await engine.playTracks(songs);
-    await waitFor(() => engine.beatSense.state == BeatSenseState.ready,
-        const Duration(seconds: 30), 'a planned transition');
+    await waitFor(
+      () => engine.beatSense.state == BeatSenseState.ready,
+      const Duration(seconds: 30),
+      'a planned transition',
+    );
     final plan = engine.beatSense.plan!;
     debugPrint('Planned: $plan');
     expect(plan.beatMatched, isTrue);
@@ -53,9 +66,16 @@ void main() {
     // Jump to just before the mix and let Beat Sense take over.
     final total = engine.duration.inMilliseconds / 1000;
     engine.seek((plan.exitAt - 3) / total);
-    await waitFor(() => engine.beatSense.state == BeatSenseState.mixing,
-        const Duration(seconds: 15), 'the mix to start');
-    await waitFor(() => engine.index == 1, const Duration(seconds: 30), 'the mix to finish');
+    await waitFor(
+      () => engine.beatSense.state == BeatSenseState.mixing,
+      const Duration(seconds: 15),
+      'the mix to start',
+    );
+    await waitFor(
+      () => engine.index == 1,
+      const Duration(seconds: 30),
+      'the mix to finish',
+    );
     expect(engine.track!.title, 'Beat Test 124');
     expect(engine.playing, isTrue);
     expect(engine.position.inMilliseconds / 1000, greaterThan(plan.entryAt));

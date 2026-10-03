@@ -19,9 +19,17 @@ class Artwork extends StatelessWidget {
     this.shadowColor,
   });
 
-  Artwork.painted(ArtStyle style,
-      {Key? key, double radius = MsSizes.tileRadius, bool shadow = false})
-      : this(key: key, art: PaintedArtwork(style), radius: radius, shadow: shadow);
+  Artwork.painted(
+    ArtStyle style, {
+    Key? key,
+    double radius = MsSizes.tileRadius,
+    bool shadow = false,
+  }) : this(
+         key: key,
+         art: PaintedArtwork(style),
+         radius: radius,
+         shadow: shadow,
+       );
 
   final ArtworkRef art;
   final double radius;
@@ -35,7 +43,10 @@ class Artwork extends StatelessWidget {
     final image = switch (art) {
       PaintedArtwork(:final style) => _Painted(style),
       NetworkArtwork(:final url) => _Network(url),
-      LocalArtwork(:final mediaId, :final fallback) => _Local(mediaId, fallback),
+      LocalArtwork(:final mediaId, :final fallback) => _Local(
+        mediaId,
+        fallback,
+      ),
     };
     final clipped = ClipRRect(
       borderRadius: BorderRadius.circular(radius),
@@ -65,20 +76,87 @@ class Artwork extends StatelessWidget {
   }
 }
 
+/// Painted artwork, rendered once per style and size into an image and
+/// reused everywhere (the painters are too heavy to run per tile).
 class _Painted extends StatelessWidget {
   const _Painted(this.style);
 
   final ArtStyle style;
 
+  static const _base = {
+    ArtStyle.futuristic: [Color(0xFF16161A), Color(0xFF0E0E10)],
+    ArtStyle.lake: [Color(0xFF3B3F5C), Color(0xFF151A27)],
+    ArtStyle.dust: [Color(0xFFB9A58C), Color(0xFFC77D36)],
+  };
+
   @override
   Widget build(BuildContext context) {
-    final painter = switch (style) {
-      ArtStyle.futuristic => const _FuturisticPainter(),
-      ArtStyle.lake => const _LakePainter(),
-      ArtStyle.dust => const _DustPainter(),
-    };
-    return CustomPaint(painter: painter, child: const SizedBox.expand());
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final logical = math.max(constraints.maxWidth, constraints.maxHeight);
+        final px = PaintedArtCache.bucket(
+          logical * MediaQuery.devicePixelRatioOf(context),
+        );
+        final ready = PaintedArtCache.peek(style, px);
+        if (ready != null) return RawImage(image: ready, fit: BoxFit.cover);
+        final placeholder = DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: _base[style]!,
+            ),
+          ),
+        );
+        return FutureBuilder<ui.Image>(
+          future: PaintedArtCache.render(style, px),
+          builder: (context, snap) => snap.hasData
+              ? RawImage(image: snap.data, fit: BoxFit.cover)
+              : placeholder,
+        );
+      },
+    );
   }
+}
+
+abstract final class PaintedArtCache {
+  static final _images = <(ArtStyle, int), ui.Image>{};
+  static final _pending = <(ArtStyle, int), Future<ui.Image>>{};
+
+  static int bucket(double px) {
+    for (final b in const [96, 192, 384, 768]) {
+      if (px <= b) return b;
+    }
+    return 1024;
+  }
+
+  static ui.Image? peek(ArtStyle style, int px) => _images[(style, px)];
+
+  /// Renders the common sizes up front so lists never show placeholders.
+  static void warmUp() {
+    for (final style in ArtStyle.values) {
+      for (final px in const [192, 384]) {
+        render(style, px);
+      }
+    }
+  }
+
+  static Future<ui.Image> render(ArtStyle style, int px) =>
+      _pending.putIfAbsent((style, px), () async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        final size = Size(px.toDouble(), px.toDouble());
+        final painter = switch (style) {
+          ArtStyle.futuristic => const _FuturisticPainter(),
+          ArtStyle.lake => const _LakePainter(),
+          ArtStyle.dust => const _DustPainter(),
+        };
+        painter.paint(canvas, size);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(px, px);
+        picture.dispose();
+        return _images[(style, px)] = image;
+      });
 }
 
 class _Network extends StatelessWidget {
@@ -89,16 +167,26 @@ class _Network extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fallback = _Painted(ArtStyle.values[url.hashCode.abs() % 3]);
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      frameBuilder: (context, child, frame, sync) => _FadeIn(
-        visible: sync || frame != null,
-        fallback: fallback,
-        child: child,
-      ),
-      errorBuilder: (context, error, stack) => fallback,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Decode at display size, not the source size.
+        final px = PaintedArtCache.bucket(
+          math.max(constraints.maxWidth, constraints.maxHeight) *
+              MediaQuery.devicePixelRatioOf(context),
+        );
+        return Image(
+          image: ResizeImage.resizeIfNeeded(px, null, NetworkImage(url)),
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          filterQuality: FilterQuality.medium,
+          frameBuilder: (context, child, frame, sync) => _FadeIn(
+            visible: sync || frame != null,
+            fallback: fallback,
+            child: child,
+          ),
+          errorBuilder: (context, error, stack) => fallback,
+        );
+      },
     );
   }
 }
@@ -119,26 +207,46 @@ class _LocalState extends State<_Local> {
   @override
   void initState() {
     super.initState();
-    LocalCovers.load(widget.mediaId).then((bytes) {
-      if (mounted && bytes != null) setState(() => _bytes = bytes);
-    });
+    _bytes = LocalCovers.peek(widget.mediaId);
+    if (_bytes == null) {
+      LocalCovers.load(widget.mediaId).then((bytes) {
+        if (mounted && bytes != null) setState(() => _bytes = bytes);
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final fallback = _Painted(widget.fallback);
-    final bytes = _bytes ?? LocalCovers.peek(widget.mediaId);
+    final bytes = _bytes;
     if (bytes == null) return fallback;
-    return _FadeIn(
-      visible: true,
-      fallback: fallback,
-      child: Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final px = PaintedArtCache.bucket(
+          math.max(constraints.maxWidth, constraints.maxHeight) *
+              MediaQuery.devicePixelRatioOf(context),
+        );
+        return _FadeIn(
+          visible: true,
+          fallback: fallback,
+          child: Image(
+            image: ResizeImage.resizeIfNeeded(px, null, MemoryImage(bytes)),
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            filterQuality: FilterQuality.medium,
+          ),
+        );
+      },
     );
   }
 }
 
 class _FadeIn extends StatelessWidget {
-  const _FadeIn({required this.visible, required this.fallback, required this.child});
+  const _FadeIn({
+    required this.visible,
+    required this.fallback,
+    required this.child,
+  });
 
   final bool visible;
   final Widget fallback;
@@ -198,9 +306,9 @@ abstract final class ArtworkPalette {
   static final _cache = <String, Color>{};
 
   static Color? peek(ArtworkRef art) => switch (art) {
-        PaintedArtwork(:final style) => _painted[style],
-        _ => _cache[_key(art)],
-      };
+    PaintedArtwork(:final style) => _painted[style],
+    _ => _cache[_key(art)],
+  };
 
   static Future<Color> of(ArtworkRef art) async {
     final known = peek(art);
@@ -224,37 +332,60 @@ abstract final class ArtworkPalette {
   }
 
   static String _key(ArtworkRef art) => switch (art) {
-        NetworkArtwork(:final url) => url,
-        LocalArtwork(:final mediaId) => 'local:$mediaId',
-        PaintedArtwork(:final style) => style.name,
-      };
+    NetworkArtwork(:final url) => url,
+    LocalArtwork(:final mediaId) => 'local:$mediaId',
+    PaintedArtwork(:final style) => style.name,
+  };
 
   /// Decodes a 24 px thumbnail and picks the most saturated mid-bright
   /// colour, weighted by how often it appears.
   static Future<Color> _vivid(Uint8List bytes) async {
     final codec = await ui.instantiateImageCodec(bytes, targetWidth: 24);
     final frame = await codec.getNextFrame();
-    final data = await frame.image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    final data = await frame.image.toByteData(
+      format: ui.ImageByteFormat.rawRgba,
+    );
     frame.image.dispose();
     if (data == null) return _painted[ArtStyle.futuristic]!;
     final buckets = <int, (double, double, double, double)>{};
     for (var i = 0; i + 3 < data.lengthInBytes; i += 4) {
-      final r = data.getUint8(i) / 255, g = data.getUint8(i + 1) / 255, b = data.getUint8(i + 2) / 255;
-      final hsv = HSVColor.fromColor(Color.fromARGB(255, (r * 255).round(), (g * 255).round(), (b * 255).round()));
+      final r = data.getUint8(i) / 255,
+          g = data.getUint8(i + 1) / 255,
+          b = data.getUint8(i + 2) / 255;
+      final hsv = HSVColor.fromColor(
+        Color.fromARGB(
+          255,
+          (r * 255).round(),
+          (g * 255).round(),
+          (b * 255).round(),
+        ),
+      );
       if (hsv.value < 0.25 || hsv.value > 0.97) continue;
       final weight = hsv.saturation * hsv.saturation;
       final bucket = (hsv.hue / 30).floor();
       final e = buckets[bucket] ?? (0, 0, 0, 0);
-      buckets[bucket] = (e.$1 + r * weight, e.$2 + g * weight, e.$3 + b * weight, e.$4 + weight);
+      buckets[bucket] = (
+        e.$1 + r * weight,
+        e.$2 + g * weight,
+        e.$3 + b * weight,
+        e.$4 + weight,
+      );
     }
     if (buckets.isEmpty) return const Color(0xFF8C7BFF);
     final best = buckets.values.reduce((a, b) => a.$4 >= b.$4 ? a : b);
     if (best.$4 < 0.5) return const Color(0xFF8C7BFF);
-    final c = Color.fromARGB(255, (best.$1 / best.$4 * 255).round(), (best.$2 / best.$4 * 255).round(),
-        (best.$3 / best.$4 * 255).round());
+    final c = Color.fromARGB(
+      255,
+      (best.$1 / best.$4 * 255).round(),
+      (best.$2 / best.$4 * 255).round(),
+      (best.$3 / best.$4 * 255).round(),
+    );
     // Keep it bright enough to read as a glow on white.
     final hsv = HSVColor.fromColor(c);
-    return hsv.withValue(math.max(hsv.value, 0.7)).withSaturation(math.max(hsv.saturation, 0.45)).toColor();
+    return hsv
+        .withValue(math.max(hsv.value, 0.7))
+        .withSaturation(math.max(hsv.saturation, 0.45))
+        .toColor();
   }
 }
 
@@ -265,7 +396,10 @@ class _FuturisticPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width, h = size.height;
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF111113));
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFF111113),
+    );
 
     final c = Offset(w * 0.5, h * 0.49);
     final ring = _wobblyRing(c, w * 0.27, h * 0.17);
@@ -298,8 +432,12 @@ class _FuturisticPainter extends CustomPainter {
         ..strokeWidth = w * 0.014,
     );
     canvas.drawPath(
-      _wobblyRing(c.translate(w * 0.01, h * 0.012), w * 0.24, h * 0.145,
-          phase: 1.3),
+      _wobblyRing(
+        c.translate(w * 0.01, h * 0.012),
+        w * 0.24,
+        h * 0.145,
+        phase: 1.3,
+      ),
       Paint()
         ..shader = iridescent
         ..style = PaintingStyle.stroke
@@ -351,7 +489,8 @@ class _FuturisticPainter extends CustomPainter {
     const steps = 96;
     for (var i = 0; i <= steps; i++) {
       final t = i / steps * math.pi * 2;
-      final wobble = 1 +
+      final wobble =
+          1 +
           0.09 * math.sin(3 * t + phase) +
           0.05 * math.cos(5 * t + phase * 2);
       final p = Offset(
@@ -408,8 +547,10 @@ class _LakePainter extends CustomPainter {
         sun,
         w * 0.45,
         Paint()
-          ..shader = ui.Gradient.radial(
-              sun, w * 0.45, [const Color(0xB3FFD39A), const Color(0x00FFD39A)]),
+          ..shader = ui.Gradient.radial(sun, w * 0.45, [
+            const Color(0xB3FFD39A),
+            const Color(0x00FFD39A),
+          ]),
       );
       // Clouds: dark bodies with warm undersides.
       for (final (x, y, rw, rh) in const [
@@ -419,7 +560,10 @@ class _LakePainter extends CustomPainter {
         (0.9, 0.3, 0.3, 0.04),
       ]) {
         final rect = Rect.fromCenter(
-            center: Offset(w * x, h * y), width: w * rw, height: h * rh);
+          center: Offset(w * x, h * y),
+          width: w * rw,
+          height: h * rh,
+        );
         canvas.drawOval(
           rect,
           Paint()
@@ -436,11 +580,21 @@ class _LakePainter extends CustomPainter {
     }
 
     // Far range: peaks either side of a low valley, snow on the tops.
-    final far = _ridge(w, horizon, seed: 3, roughness: 0.07,
-        profile: (x) => 0.36 + 0.3 * math.pow((x - 0.55).abs() * 2, 1.4));
+    final far = _ridge(
+      w,
+      horizon,
+      seed: 3,
+      roughness: 0.07,
+      profile: (x) => 0.36 + 0.3 * math.pow((x - 0.55).abs() * 2, 1.4),
+    );
     // Near cliffs: steep on both sides, open to the water in the middle.
-    final near = _ridge(w, horizon, seed: 11, roughness: 0.05,
-        profile: (x) => 0.04 + 0.86 * math.pow((x - 0.52).abs() * 2, 2.2));
+    final near = _ridge(
+      w,
+      horizon,
+      seed: 11,
+      roughness: 0.05,
+      profile: (x) => 0.04 + 0.86 * math.pow((x - 0.52).abs() * 2, 2.2),
+    );
 
     void ridges(Canvas canvas) {
       canvas.drawPath(
@@ -474,7 +628,10 @@ class _LakePainter extends CustomPainter {
     canvas.saveLayer(
       water,
       Paint()
-        ..imageFilter = ui.ImageFilter.blur(sigmaX: w * 0.004, sigmaY: h * 0.01),
+        ..imageFilter = ui.ImageFilter.blur(
+          sigmaX: w * 0.004,
+          sigmaY: h * 0.01,
+        ),
     );
     canvas.translate(0, horizon * 2);
     canvas.scale(1, -1);
@@ -484,11 +641,10 @@ class _LakePainter extends CustomPainter {
     canvas.drawRect(
       water,
       Paint()
-        ..shader = ui.Gradient.linear(
-          Offset(0, horizon),
-          Offset(0, h),
-          const [Color(0x22080A12), Color(0xCC080A12)],
-        ),
+        ..shader = ui.Gradient.linear(Offset(0, horizon), Offset(0, h), const [
+          Color(0x22080A12),
+          Color(0xCC080A12),
+        ]),
     );
     final shimmer = Paint()
       ..color = const Color(0x33FFE0B8)
@@ -505,10 +661,13 @@ class _LakePainter extends CustomPainter {
 
   /// A ridge line from [profile] (height above the horizon as a fraction of
   /// it) plus a few octaves of seeded noise, so peaks look natural.
-  Path _ridge(double w, double horizon,
-      {required int seed,
-      required double roughness,
-      required double Function(double x) profile}) {
+  Path _ridge(
+    double w,
+    double horizon, {
+    required int seed,
+    required double roughness,
+    required double Function(double x) profile,
+  }) {
     final rng = math.Random(seed);
     final phases = List.generate(4, (_) => rng.nextDouble() * math.pi * 2);
     final path = Path()..moveTo(0, horizon);
@@ -560,8 +719,11 @@ class _DustPainter extends CustomPainter {
     for (var i = 0; i < 46; i++) {
       final d = w * (0.05 + math.pow(rng.nextDouble(), 0.8) * 0.85);
       final r = w * (0.06 + d / w * 0.2) * (0.6 + rng.nextDouble() * 0.6);
-      final warm = Color.lerp(const Color(0xFFB8682A), const Color(0xFFF0C07E),
-          rng.nextDouble())!;
+      final warm = Color.lerp(
+        const Color(0xFFB8682A),
+        const Color(0xFFF0C07E),
+        rng.nextDouble(),
+      )!;
       canvas.drawCircle(
         along(d, coneAngle()),
         r,
@@ -590,8 +752,10 @@ class _DustPainter extends CustomPainter {
     canvas.drawPath(
       dune,
       Paint()
-        ..shader = ui.Gradient.linear(Offset(0, h * 0.85), Offset(0, h),
-            const [Color(0xFFC77D36), Color(0xFF8E4F1E)]),
+        ..shader = ui.Gradient.linear(Offset(0, h * 0.85), Offset(0, h), const [
+          Color(0xFFC77D36),
+          Color(0xFF8E4F1E),
+        ]),
     );
   }
 

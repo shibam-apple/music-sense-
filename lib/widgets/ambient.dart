@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
@@ -66,42 +68,93 @@ class Accent extends InheritedWidget {
   bool updateShouldNotify(Accent oldWidget) => oldWidget.color != color;
 }
 
-/// Calls [builder] every frame with a 0–1 pulse that peaks on each beat of
-/// the playing song (and rests at 0 when paused or the beat is unknown).
-class BeatPulse extends StatefulWidget {
-  const BeatPulse({super.key, required this.builder, this.child});
+/// One clock for everything that moves with the music: a 0–1 pulse that
+/// peaks on each beat of the playing song. Its ticker runs only while
+/// music plays (and while the last pulse fades), so an idle app draws
+/// nothing per frame.
+class BeatClock extends StatefulWidget {
+  const BeatClock({super.key, required this.child});
 
-  final Widget Function(BuildContext context, double pulse, Widget? child) builder;
-  final Widget? child;
+  final Widget child;
+
+  /// The shared pulse; listen to it rather than rebuilding on it.
+  static ValueListenable<double> of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_BeatScope>()?.pulse ?? _resting;
+
+  static final _resting = ValueNotifier<double>(0);
 
   @override
-  State<BeatPulse> createState() => _BeatPulseState();
+  State<BeatClock> createState() => _BeatClockState();
 }
 
-class _BeatPulseState extends State<BeatPulse> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker;
-  double _pulse = 0;
+class _BeatScope extends InheritedWidget {
+  const _BeatScope({required this.pulse, required super.child});
+
+  final ValueNotifier<double> pulse;
 
   @override
-  void initState() {
-    super.initState();
-    _ticker = createTicker((_) {
-      final player = PlayerScope.read(context);
-      final phase = player.playing ? player.beatPhase : null;
-      final next = phase == null ? _pulse * 0.9 : math.exp(-phase * 6);
-      if ((next - _pulse).abs() > 0.004) setState(() => _pulse = next);
-    })..start();
+  bool updateShouldNotify(_BeatScope oldWidget) => false;
+}
+
+class _BeatClockState extends State<BeatClock>
+    with SingleTickerProviderStateMixin {
+  final _pulse = ValueNotifier<double>(0);
+  late final Ticker _ticker = createTicker(_tick);
+  PlaybackController? _player;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final player = PlayerScope.of(context);
+    if (player != _player) {
+      _player?.removeListener(_wake);
+      _player = player..addListener(_wake);
+    }
+    _wake();
+  }
+
+  void _wake() {
+    if ((_player?.playing ?? false) && !_ticker.isActive) _ticker.start();
+  }
+
+  void _tick(Duration _) {
+    final player = _player;
+    final phase = player != null && player.playing ? player.beatPhase : null;
+    final next = phase == null ? _pulse.value * 0.88 : math.exp(-phase * 6);
+    if ((next - _pulse.value).abs() > 0.003) _pulse.value = next;
+    if (phase == null && _pulse.value < 0.01) {
+      _pulse.value = 0;
+      _ticker.stop();
+    }
   }
 
   @override
   void dispose() {
+    _player?.removeListener(_wake);
     _ticker.dispose();
+    _pulse.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) =>
-      widget.builder(context, _pulse, widget.child);
+      _BeatScope(pulse: _pulse, child: widget.child);
+}
+
+/// Rebuilds only [builder]'s subtree with the shared beat pulse.
+class BeatPulse extends StatelessWidget {
+  const BeatPulse({super.key, required this.builder, this.child});
+
+  final Widget Function(BuildContext context, double pulse, Widget? child)
+  builder;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<double>(
+    valueListenable: BeatClock.of(context),
+    builder: builder,
+    child: child,
+  );
 }
 
 /// PlayStation-style ambient backdrop: soft light in the cover's colour
@@ -133,66 +186,93 @@ class _AmbientBackdropState extends State<AmbientBackdrop>
   Widget build(BuildContext context) {
     final color = Accent.of(context);
     return IgnorePointer(
-      child: LayoutBuilder(builder: (context, size) {
-        final w = size.maxWidth, h = size.maxHeight;
-        Widget glow(double radius, double alpha, Offset Function(double t) at) {
-          final dot = RepaintBoundary(
-            child: SizedBox.square(
-              dimension: radius * 2,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [
-                    color.withValues(alpha: alpha),
-                    color.withValues(alpha: 0),
-                  ]),
+      child: LayoutBuilder(
+        builder: (context, size) {
+          final w = size.maxWidth, h = size.maxHeight;
+          Widget glow(
+            double radius,
+            double alpha,
+            Offset Function(double t) at,
+          ) {
+            final dot = RepaintBoundary(
+              child: SizedBox.square(
+                dimension: radius * 2,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        color.withValues(alpha: alpha),
+                        color.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          );
-          return AnimatedBuilder(
-            animation: _drift,
-            child: dot,
-            builder: (context, child) {
-              final c = at(_drift.value * math.pi * 2);
-              return Transform.translate(
-                offset: Offset(c.dx - radius, c.dy - radius),
-                child: child,
-              );
-            },
-          );
-        }
+            );
+            return AnimatedBuilder(
+              animation: _drift,
+              child: dot,
+              builder: (context, child) {
+                final c = at(_drift.value * math.pi * 2);
+                return Transform.translate(
+                  offset: Offset(c.dx - radius, c.dy - radius),
+                  child: child,
+                );
+              },
+            );
+          }
 
-        return Stack(
-          clipBehavior: Clip.hardEdge,
-          children: [
-            Positioned(
-              left: 0,
-              top: 0,
-              child: glow(w * 0.75, 0.13,
-                  (t) => Offset(w * (0.85 + 0.08 * math.sin(t)), h * (0.06 + 0.04 * math.cos(t * 2)))),
-            ),
-            Positioned(
-              left: 0,
-              top: 0,
-              child: glow(w * 0.6, 0.06,
-                  (t) => Offset(w * (0.05 + 0.1 * math.cos(t)), h * (0.42 + 0.05 * math.sin(t)))),
-            ),
-            Positioned(
-              left: 0,
-              top: 0,
-              child: glow(w * 0.7, 0.09,
-                  (t) => Offset(w * (0.6 + 0.1 * math.sin(t + 2)), h * (0.86 + 0.03 * math.cos(t)))),
-            ),
-          ],
-        );
-      }),
+          return Stack(
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Positioned(
+                left: 0,
+                top: 0,
+                child: glow(
+                  w * 0.75,
+                  0.13,
+                  (t) => Offset(
+                    w * (0.85 + 0.08 * math.sin(t)),
+                    h * (0.06 + 0.04 * math.cos(t * 2)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: glow(
+                  w * 0.6,
+                  0.06,
+                  (t) => Offset(
+                    w * (0.05 + 0.1 * math.cos(t)),
+                    h * (0.42 + 0.05 * math.sin(t)),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: glow(
+                  w * 0.7,
+                  0.09,
+                  (t) => Offset(
+                    w * (0.6 + 0.1 * math.sin(t + 2)),
+                    h * (0.86 + 0.03 * math.cos(t)),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
 /// A soft diagonal light that sweeps across its child every few seconds,
-/// the way PlayStation tiles shimmer when focused.
+/// the way PlayStation tiles shimmer when focused. Animates only during
+/// the sweep; a timer waits in between.
 class Glint extends StatefulWidget {
   const Glint({
     super.key,
@@ -212,67 +292,80 @@ class Glint extends StatefulWidget {
 }
 
 class _GlintState extends State<Glint> with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(vsync: this, duration: widget.period);
+  late final _sweep = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  );
+  Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    // Start part-way through the cycle so the first sweep comes after
-    // [delay]; the sweep happens at the start of each cycle.
-    final offset = widget.delay.inMicroseconds / widget.period.inMicroseconds;
-    _controller.value = (1 - offset) % 1;
-    _controller.repeat();
+    _timer = Timer(widget.delay, () {
+      _run();
+      _timer = Timer.periodic(widget.period, (_) => _run());
+    });
+  }
+
+  void _run() {
+    if (mounted && TickerMode.valuesOf(context).enabled) {
+      _sweep.forward(from: 0);
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _timer?.cancel();
+    _sweep.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.passthrough,
-      children: [
-        widget.child,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(widget.radius),
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, _) {
-                  // Sweep during the first 18% of each period, then rest.
-                  final x = (_controller.value / 0.18).clamp(0.0, 1.0);
-                  if (x <= 0 || x >= 1) return const SizedBox.shrink();
-                  final at = -0.6 + 2.2 * Curves.easeInOut.transform(x);
-                  return DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: const Alignment(-1, -1),
-                        end: const Alignment(1, 1),
-                        stops: [
-                          (at - 0.18).clamp(0.0, 1.0),
-                          at.clamp(0.0, 1.0),
-                          (at + 0.18).clamp(0.0, 1.0),
-                        ],
-                        colors: [
-                          Colors.white.withValues(alpha: 0),
-                          Colors.white.withValues(alpha: 0.28),
-                          Colors.white.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ),
-      ],
+    return CustomPaint(
+      foregroundPainter: _GlintPainter(_sweep, widget.radius),
+      child: widget.child,
     );
   }
+}
+
+class _GlintPainter extends CustomPainter {
+  _GlintPainter(this.sweep, this.radius) : super(repaint: sweep);
+
+  final Animation<double> sweep;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = sweep.value;
+    if (x <= 0 || x >= 1) return;
+    final at = -0.6 + 2.2 * Curves.easeInOut.transform(x);
+    final rect = Offset.zero & size;
+    canvas.save();
+    canvas.clipRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)));
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: const Alignment(-1, -1),
+          end: const Alignment(1, 1),
+          stops: [
+            (at - 0.18).clamp(0.0, 1.0),
+            at.clamp(0.0, 1.0),
+            (at + 0.18).clamp(0.0, 1.0),
+          ],
+          colors: [
+            Colors.white.withValues(alpha: 0),
+            Colors.white.withValues(alpha: 0.28),
+            Colors.white.withValues(alpha: 0),
+          ],
+        ).createShader(rect),
+    );
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_GlintPainter old) => false;
 }
 
 /// Small motes of light that rise off a cover in time with the music.
@@ -291,64 +384,87 @@ class _Mote {
   final Duration born;
 }
 
-class _LightMotesState extends State<LightMotes> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker;
+class _LightMotesState extends State<LightMotes>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker = createTicker(_tick);
   final _motes = <_Mote>[];
   final _rng = math.Random(3);
-  Duration _now = Duration.zero;
+  final _frame = ValueNotifier<Duration>(Duration.zero);
   double _lastPhase = 1;
+  PlaybackController? _player;
 
   static const _life = Duration(milliseconds: 2600);
 
   @override
-  void initState() {
-    super.initState();
-    _ticker = createTicker((elapsed) {
-      _now = elapsed;
-      final player = PlayerScope.read(context);
-      final phase = player.playing ? player.beatPhase : null;
-      // A new beat started: release a few motes.
-      if (phase != null && phase < _lastPhase - 0.5) {
-        for (var i = 0; i < 2 + _rng.nextInt(2); i++) {
-          _motes.add(_Mote(_rng.nextDouble(), 1.2 + _rng.nextDouble() * 2.2,
-              0.6 + _rng.nextDouble() * 0.6, elapsed));
-        }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final player = PlayerScope.of(context);
+    if (player != _player) {
+      _player?.removeListener(_wake);
+      _player = player..addListener(_wake);
+    }
+    _wake();
+  }
+
+  void _wake() {
+    if ((_player?.playing ?? false) && !_ticker.isActive) _ticker.start();
+  }
+
+  void _tick(Duration elapsed) {
+    final player = _player!;
+    final phase = player.playing ? player.beatPhase : null;
+    // A new beat started: release a few motes.
+    if (phase != null && phase < _lastPhase - 0.5) {
+      for (var i = 0; i < 2 + _rng.nextInt(2); i++) {
+        _motes.add(
+          _Mote(
+            _rng.nextDouble(),
+            1.2 + _rng.nextDouble() * 2.2,
+            0.6 + _rng.nextDouble() * 0.6,
+            elapsed,
+          ),
+        );
       }
-      if (phase != null) _lastPhase = phase;
-      final had = _motes.isNotEmpty;
-      _motes.removeWhere((m) => elapsed - m.born > _life);
-      if (had || _motes.isNotEmpty) setState(() {});
-    })..start();
+    }
+    if (phase != null) _lastPhase = phase;
+    _motes.removeWhere((m) => elapsed - m.born > _life);
+    _frame.value = elapsed;
+    if (_motes.isEmpty && !player.playing) _ticker.stop();
   }
 
   @override
   void dispose() {
+    _player?.removeListener(_wake);
     _ticker.dispose();
+    _frame.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      foregroundPainter: _MotesPainter(_motes, _now, Accent.of(context)),
+      foregroundPainter: _MotesPainter(_motes, _frame, Accent.of(context)),
       child: widget.child,
     );
   }
 }
 
 class _MotesPainter extends CustomPainter {
-  _MotesPainter(this.motes, this.now, this.color);
+  _MotesPainter(this.motes, this.frame, this.color) : super(repaint: frame);
 
   final List<_Mote> motes;
-  final Duration now;
+  final ValueListenable<Duration> frame;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final m in motes) {
-      final age = (now - m.born).inMicroseconds / _LightMotesState._life.inMicroseconds;
+      final age =
+          (frame.value - m.born).inMicroseconds /
+          _LightMotesState._life.inMicroseconds;
       final y = size.height * (0.92 - age * 0.75 * m.speed);
-      final x = size.width * (0.1 + 0.8 * m.x) + math.sin(age * 6 + m.x * 9) * 8;
+      final x =
+          size.width * (0.1 + 0.8 * m.x) + math.sin(age * 6 + m.x * 9) * 8;
       final alpha = math.sin(age * math.pi) * 0.9;
       final c = Offset(x, y);
       final r = m.size * 4;
@@ -356,17 +472,23 @@ class _MotesPainter extends CustomPainter {
         c,
         r,
         Paint()
-          ..shader = RadialGradient(colors: [
-            color.withValues(alpha: alpha * 0.3),
-            color.withValues(alpha: 0),
-          ]).createShader(Rect.fromCircle(center: c, radius: r)),
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: alpha * 0.3),
+              color.withValues(alpha: 0),
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: r)),
       );
-      canvas.drawCircle(c, m.size, Paint()..color = Colors.white.withValues(alpha: alpha));
+      canvas.drawCircle(
+        c,
+        m.size,
+        Paint()..color = Colors.white.withValues(alpha: alpha),
+      );
     }
   }
 
   @override
-  bool shouldRepaint(_MotesPainter old) => true;
+  bool shouldRepaint(_MotesPainter old) => old.color != color;
 }
 
 /// The three-bar "now playing" glyph, dancing with the beat while playing.
@@ -378,21 +500,20 @@ class PlayingBars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playing = PlayerScope.of(context).playing;
-    return BeatPulse(
-      builder: (context, pulse, _) => SizedBox(
+    return RepaintBoundary(
+      child: SizedBox(
         width: size,
         height: size,
-        child: CustomPaint(painter: _BarsPainter(playing ? pulse : 0, color)),
+        child: CustomPaint(painter: _BarsPainter(BeatClock.of(context), color)),
       ),
     );
   }
 }
 
 class _BarsPainter extends CustomPainter {
-  _BarsPainter(this.pulse, this.color);
+  _BarsPainter(this.pulse, this.color) : super(repaint: pulse);
 
-  final double pulse;
+  final ValueListenable<double> pulse;
   final Color color;
 
   @override
@@ -405,19 +526,30 @@ class _BarsPainter extends CustomPainter {
     const swing = [0.4, -0.3, 0.35];
     for (var i = 0; i < 3; i++) {
       final x = size.width * (0.18 + i * 0.32);
-      final h = (rest[i] + swing[i] * pulse).clamp(0.2, 1.0) * size.height;
-      canvas.drawLine(Offset(x, size.height), Offset(x, size.height - h), paint);
+      final h =
+          (rest[i] + swing[i] * pulse.value).clamp(0.2, 1.0) * size.height;
+      canvas.drawLine(
+        Offset(x, size.height),
+        Offset(x, size.height - h),
+        paint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(_BarsPainter old) => old.pulse != pulse || old.color != color;
+  bool shouldRepaint(_BarsPainter old) =>
+      old.color != color || old.pulse != pulse;
 }
 
 /// Cover art with the polish used on the big covers: a beat "breath", the
 /// light sweep and a shadow tinted with the cover's colour.
 class LiveCover extends StatelessWidget {
-  const LiveCover({super.key, required this.art, this.radius = 12, this.motes = false});
+  const LiveCover({
+    super.key,
+    required this.art,
+    this.radius = 12,
+    this.motes = false,
+  });
 
   final ArtworkRef art;
   final double radius;
@@ -428,7 +560,12 @@ class LiveCover extends StatelessWidget {
     final accent = Accent.of(context);
     Widget cover = Glint(
       radius: radius,
-      child: Artwork(art: art, radius: radius, shadow: true, shadowColor: accent),
+      child: Artwork(
+        art: art,
+        radius: radius,
+        shadow: true,
+        shadowColor: accent,
+      ),
     );
     if (motes) cover = LightMotes(child: cover);
     return BeatPulse(

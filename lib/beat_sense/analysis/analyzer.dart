@@ -28,8 +28,11 @@ class BeatSenseAnalyzer {
     final kick = _normalise(_localContrast(f.lowFlux, (fps * 0.4).round()));
 
     final tempo = _tempo(_smooth(onset), fps);
-    final beatFrames =
-        _onTheBeat(_trackBeats(onset, tempo.period), kick, tempo.period);
+    final beatFrames = _onTheBeat(
+      _trackBeats(onset, tempo.period),
+      kick,
+      tempo.period,
+    );
     final beats = [for (final b in beatFrames) _frameTime(b)];
     final bpm = _refineBpm(beats, 60 * fps / tempo.period);
 
@@ -169,7 +172,11 @@ class BeatSenseAnalyzer {
     if (beats.length < 8) return beats;
     double around(int f) {
       var m = 0.0;
-      for (var j = math.max(0, f - 2); j <= math.min(kick.length - 1, f + 2); j++) {
+      for (
+        var j = math.max(0, f - 2);
+        j <= math.min(kick.length - 1, f + 2);
+        j++
+      ) {
         m = math.max(m, kick[j]);
       }
       return m;
@@ -197,7 +204,8 @@ class BeatSenseAnalyzer {
       prefix[i + 1] = prefix[i] + x[i];
     }
     for (var i = 0; i < x.length; i++) {
-      final lo = math.max(0, i - radius), hi = math.min(x.length, i + radius + 1);
+      final lo = math.max(0, i - radius),
+          hi = math.min(x.length, i + radius + 1);
       final mean = (prefix[hi] - prefix[lo]) / (hi - lo);
       out[i] = math.max(0, x[i] - mean);
     }
@@ -247,7 +255,9 @@ class BeatSenseAnalyzer {
     // Reward lags whose double also lines up (true beats repeat every bar).
     double weighted(int lag) {
       final bpm = 60 * fps / lag;
-      final prior = math.exp(-0.5 * math.pow(math.log(bpm / 120) / math.ln2 / 0.9, 2));
+      final prior = math.exp(
+        -0.5 * math.pow(math.log(bpm / 120) / math.ln2 / 0.9, 2),
+      );
       final twice = lag * 2 <= maxLag * 2 ? ac(lag * 2) : 0.0;
       return (scores[lag]! + 0.5 * twice) * prior;
     }
@@ -355,7 +365,11 @@ class BeatSenseAnalyzer {
     for (var i = 0; i < beats.length; i++) {
       final f = beats[i];
       var k = 0.0, r = 0.0;
-      for (var j = math.max(0, f - 1); j <= math.min(kick.length - 1, f + 2); j++) {
+      for (
+        var j = math.max(0, f - 1);
+        j <= math.min(kick.length - 1, f + 2);
+        j++
+      ) {
         k = math.max(k, kick[j]);
         r = math.max(r, rms[j]);
       }
@@ -370,14 +384,19 @@ class BeatSenseAnalyzer {
   }
 
   List<double> _barEnergy(
-      List<double> downbeats, Float64List rms, double fps, double duration) {
+    List<double> downbeats,
+    Float64List rms,
+    double fps,
+    double duration,
+  ) {
     if (downbeats.isEmpty) return const [];
     final values = <double>[];
     for (var i = 0; i < downbeats.length; i++) {
       final from = (downbeats[i] * fps).floor();
-      final to = ((i + 1 < downbeats.length ? downbeats[i + 1] : duration) * fps)
-          .floor()
-          .clamp(from + 1, rms.length);
+      final to =
+          ((i + 1 < downbeats.length ? downbeats[i + 1] : duration) * fps)
+              .floor()
+              .clamp(from + 1, rms.length);
       var s = 0.0;
       for (var f = from; f < to && f < rms.length; f++) {
         s += rms[f] * rms[f];
@@ -423,8 +442,34 @@ class BeatSenseAnalyzer {
 
   /// Krumhansl–Kessler key profiles correlated with the track's chroma.
   ({MusicalKey key, double confidence}) _key(Float64List chroma) {
-    const major = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
-    const minor = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+    const major = [
+      6.35,
+      2.23,
+      3.48,
+      2.33,
+      4.38,
+      4.09,
+      2.52,
+      5.19,
+      2.39,
+      3.66,
+      2.29,
+      2.88,
+    ];
+    const minor = [
+      6.33,
+      2.68,
+      3.52,
+      5.38,
+      2.60,
+      3.53,
+      2.54,
+      4.75,
+      3.98,
+      2.69,
+      3.34,
+      3.17,
+    ];
 
     double correlate(List<double> profile, int tonic) {
       var mx = 0.0, my = 0.0;
@@ -476,7 +521,10 @@ class BeatSenseAnalyzer {
   /// The intro ends at the first bar that reaches most of the track's
   /// typical level; the outro starts after the last such bar.
   (double, double) _introOutro(
-      List<double> downbeats, List<double> barEnergy, double duration) {
+    List<double> downbeats,
+    List<double> barEnergy,
+    double duration,
+  ) {
     if (barEnergy.length < 4) return (0, duration);
     final sorted = [...barEnergy]..sort();
     final typical = sorted[(sorted.length * 0.6).floor()];

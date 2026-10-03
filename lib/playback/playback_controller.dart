@@ -32,17 +32,22 @@ class BeatSenseStatus {
 
   /// One short line for the Now Playing label.
   String get label => switch (state) {
-        BeatSenseState.off => 'NOW PLAYING',
-        BeatSenseState.analysing => 'BEAT SENSE · LISTENING',
-        BeatSenseState.ready => 'BEAT SENSE · READY',
-        BeatSenseState.mixing => 'BEAT SENSE · MIXING',
-        BeatSenseState.unavailable => 'NOW PLAYING',
-      };
+    BeatSenseState.off => 'NOW PLAYING',
+    BeatSenseState.analysing => 'BEAT SENSE · LISTENING',
+    BeatSenseState.ready => 'BEAT SENSE · READY',
+    BeatSenseState.mixing => 'BEAT SENSE · MIXING',
+    BeatSenseState.unavailable => 'NOW PLAYING',
+  };
 }
 
 /// Everything the pages need from playback. Implemented by the Beat Sense
 /// engine on devices and by a demo clock on the web preview and in tests.
 abstract class PlaybackController extends ChangeNotifier {
+  /// The playback position, updated several times a second. Kept apart
+  /// from [notifyListeners] (which fires on track, play/pause and Beat
+  /// Sense changes) so only the seek bar and timers rebuild as it moves.
+  final positionListenable = ValueNotifier<Duration>(Duration.zero);
+
   Track? get track;
   List<Track> get queue;
   int get index;
@@ -83,6 +88,13 @@ abstract class PlaybackController extends ChangeNotifier {
 
   bool get beatSenseEnabled;
   set beatSenseEnabled(bool value);
+
+  @override
+  void dispose() {
+    positionListenable.dispose();
+    super.dispose();
+  }
+
   BeatSenseStatus get beatSense;
 
   Future<void> playTracks(List<Track> tracks, {int start = 0});
@@ -110,6 +122,24 @@ class PlayerScope extends InheritedNotifier<PlaybackController> {
   /// per-frame visuals that poll it from a ticker.
   static PlaybackController read(BuildContext context) =>
       context.getInheritedWidgetOfExactType<PlayerScope>()!.notifier!;
+}
+
+/// Rebuilds [builder] as the playback position moves, without rebuilding
+/// the page around it.
+class PositionBuilder extends StatelessWidget {
+  const PositionBuilder({super.key, required this.builder});
+
+  final Widget Function(BuildContext context, PlaybackController player)
+  builder;
+
+  @override
+  Widget build(BuildContext context) {
+    final player = PlayerScope.of(context);
+    return ValueListenableBuilder<Duration>(
+      valueListenable: player.positionListenable,
+      builder: (context, _, _) => builder(context, player),
+    );
+  }
 }
 
 String formatTime(Duration d) {

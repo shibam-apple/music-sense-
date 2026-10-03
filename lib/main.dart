@@ -16,9 +16,11 @@ import 'sources/music_source.dart';
 import 'sources/youtube_music/youtube_music_source.dart';
 import 'theme/tokens.dart';
 import 'widgets/ambient.dart';
+import 'widgets/artwork.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PaintedArtCache.warmUp();
   final device = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   final sources = <MusicSource>[
@@ -30,7 +32,10 @@ Future<void> main() async {
 
   final PlaybackController player;
   if (device) {
-    player = MixEngine(sources: {for (final s in sources) s.id: s}, analysis: analysis);
+    player = MixEngine(
+      sources: {for (final s in sources) s.id: s},
+      analysis: analysis,
+    );
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     await AudioService.init(
@@ -64,27 +69,29 @@ class MusicSenseApp extends StatelessWidget {
       child: LibraryScope(
         library: library,
         child: NowPlayingAccent(
-          child: MaterialApp(
-            title: 'Music Sense',
-            debugShowCheckedModeBanner: false,
-            theme: ThemeData(
-              fontFamily: MsText.family,
-              scaffoldBackgroundColor: MsColors.background,
-              splashFactory: NoSplash.splashFactory,
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: MsColors.accent,
-                primary: MsColors.accent,
-                surface: MsColors.background,
+          child: BeatClock(
+            child: MaterialApp(
+              title: 'Music Sense',
+              debugShowCheckedModeBanner: false,
+              theme: ThemeData(
+                fontFamily: MsText.family,
+                scaffoldBackgroundColor: MsColors.background,
+                splashFactory: NoSplash.splashFactory,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: MsColors.accent,
+                  primary: MsColors.accent,
+                  surface: MsColors.background,
+                ),
               ),
-            ),
-            home: const AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle(
-                statusBarColor: Color(0x00000000),
-                statusBarIconBrightness: Brightness.dark,
-                systemNavigationBarColor: Color(0x00000000),
-                systemNavigationBarIconBrightness: Brightness.dark,
+              home: const AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle(
+                  statusBarColor: Color(0x00000000),
+                  statusBarIconBrightness: Brightness.dark,
+                  systemNavigationBarColor: Color(0x00000000),
+                  systemNavigationBarIconBrightness: Brightness.dark,
+                ),
+                child: _Frame(child: PanoramaShell()),
               ),
-              child: _Frame(child: PanoramaShell()),
             ),
           ),
         ),

@@ -12,6 +12,7 @@ import 'pages/playing_page.dart';
 import 'playback/playback_controller.dart';
 import 'theme/tokens.dart';
 import 'widgets/ambient.dart';
+import 'widgets/panorama.dart';
 import 'widgets/xmb_bar.dart';
 
 /// The home screen: a Metro panorama of pages driven by one fractional page
@@ -43,7 +44,11 @@ class _PanoramaShellState extends State<PanoramaShell>
     ArtistPage(),
   ];
 
-  static const _spring = SpringDescription(mass: 1, stiffness: 180, damping: 26);
+  static const _spring = SpringDescription(
+    mass: 1,
+    stiffness: 180,
+    damping: 26,
+  );
 
   late final _page = AnimationController.unbounded(vsync: this)
     ..addListener(_tickOnSnap);
@@ -61,17 +66,37 @@ class _PanoramaShellState extends State<PanoramaShell>
 
   int get _last => _pages.length - 1;
 
+  static const _ids = [
+    'music',
+    'albums',
+    'featured',
+    'new',
+    'playing',
+    'artist',
+  ];
+  final _scrollTop = ValueNotifier<(String, int)>(('', 0));
+
+  /// Tapping an icon goes to its page; tapping the active one scrolls that
+  /// page back to the top.
+  void _select(int index) {
+    if (index == _page.value.round() && !_page.isAnimating) {
+      HapticFeedback.selectionClick();
+      _scrollTop.value = (_ids[index], _scrollTop.value.$2 + 1);
+      return;
+    }
+    _goTo(index);
+  }
+
   @override
   void dispose() {
     _page.dispose();
+    _scrollTop.dispose();
     super.dispose();
   }
 
   void _goTo(int index, {double velocity = 0}) {
     final target = index.clamp(0, _last).toDouble();
-    _page.animateWith(
-      SpringSimulation(_spring, _page.value, target, velocity),
-    );
+    _page.animateWith(SpringSimulation(_spring, _page.value, target, velocity));
   }
 
   void _onDragStart(DragStartDetails _) {
@@ -120,46 +145,56 @@ class _PanoramaShellState extends State<PanoramaShell>
     return Focus(
       autofocus: true,
       onKeyEvent: _onKey,
-      child: LayoutBuilder(builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: _onDragStart,
-          onHorizontalDragUpdate: _onDragUpdate,
-          onHorizontalDragEnd: _onDragEnd,
-          child: Stack(
-            children: [
-              const Positioned.fill(child: AmbientBackdrop()),
-              AnimatedBuilder(
-                animation: _page,
-                builder: (context, _) {
-                  final p = _page.value;
-                  return Stack(
-                    children: [
-                      for (final (i, page) in _pages.indexed)
-                        if (_visible(i, p, width))
-                          Positioned(
-                            key: ValueKey(i),
-                            left: (i - p) * MsSizes.pageStride,
-                            top: 0,
-                            bottom: 0,
-                            width: width,
-                            child: RepaintBoundary(child: page),
-                          ),
-                    ],
-                  );
-                },
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          return ScrollToTop(
+            requests: _scrollTop,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragStart: _onDragStart,
+              onHorizontalDragUpdate: _onDragUpdate,
+              onHorizontalDragEnd: _onDragEnd,
+              child: Stack(
+                children: [
+                  const Positioned.fill(child: AmbientBackdrop()),
+                  AnimatedBuilder(
+                    animation: _page,
+                    builder: (context, _) {
+                      final p = _page.value;
+                      return Stack(
+                        children: [
+                          for (final (i, page) in _pages.indexed)
+                            if (_visible(i, p, width))
+                              Positioned(
+                                key: ValueKey(i),
+                                left: (i - p) * MsSizes.pageStride,
+                                top: 0,
+                                bottom: 0,
+                                width: width,
+                                child: RepaintBoundary(child: page),
+                              ),
+                        ],
+                      );
+                    },
+                  ),
+                  const Positioned.fill(child: ColumnFade()),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: MsSizes.barFromBottom - MsSizes.barHeight / 2,
+                    child: XmbBar(
+                      items: _items,
+                      page: _page,
+                      onSelect: _select,
+                    ),
+                  ),
+                ],
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: MsSizes.barFromBottom - MsSizes.barHeight / 2,
-                child: XmbBar(items: _items, page: _page, onSelect: _goTo),
-              ),
-            ],
-          ),
-        );
-      }),
+            ),
+          );
+        },
+      ),
     );
   }
 

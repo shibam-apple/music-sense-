@@ -14,10 +14,11 @@ class Deck {
   Deck() : this._(_android ? AndroidEqualizer() : null);
 
   Deck._(this._eq)
-      : audio = AudioPlayer(
-          audioPipeline:
-              _eq == null ? null : AudioPipeline(androidAudioEffects: [_eq]),
-        );
+    : audio = AudioPlayer(
+        audioPipeline: _eq == null
+            ? null
+            : AudioPipeline(androidAudioEffects: [_eq]),
+      );
 
   static bool get _android =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -43,7 +44,11 @@ class Deck {
     this.track = track;
     analysis = null;
     await audio.setAudioSource(
-      AudioSource.uri(ref.uri, headers: ref.headers.isEmpty ? null : ref.headers, tag: track),
+      AudioSource.uri(
+        ref.uri,
+        headers: ref.headers.isEmpty ? null : ref.headers,
+        tag: track,
+      ),
       initialPosition: Duration(microseconds: (at * 1e6).round()),
     );
     await setRate(1);
@@ -92,4 +97,3 @@ class Deck {
 
   Future<void> dispose() => audio.dispose();
 }
-

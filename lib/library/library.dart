@@ -57,6 +57,10 @@ class LibraryController extends ChangeNotifier {
     _tracks = _demo ? DemoSource.tracks : _dedupe(found);
     _loading = false;
     _albums = null;
+    _recent = null;
+    _singles = null;
+    _mixArtists = null;
+    _byArtist.clear();
     notifyListeners();
   }
 
@@ -69,41 +73,55 @@ class LibraryController extends ChangeNotifier {
   }
 
   /// Newest first where dates are known; source order otherwise.
-  List<Track> get recent {
+  List<Track> get recent => _recent ??= () {
     final dated = _tracks.where((t) => t.added != null).toList()
       ..sort((a, b) => b.added!.compareTo(a.added!));
     return dated.length == _tracks.length ? dated : _tracks;
-  }
+  }();
+  List<Track>? _recent;
 
   List<Album>? _albums;
 
   /// Albums with more than one song, biggest first.
   List<Album> get albums => _albums ??= () {
-        final groups = <String, List<Track>>{};
-        for (final t in _tracks) {
-          if (t.album == null) continue;
-          groups.putIfAbsent('${t.album}|${t.artist}', () => []).add(t);
-        }
-        final list = [
-          for (final g in groups.values)
-            if (g.length > 1)
-              Album(title: g.first.album!, artist: g.first.artist, tracks: g),
-        ];
-        // Keep the source's order (newest first for local files).
-        return list;
-      }();
+    final groups = <String, List<Track>>{};
+    for (final t in _tracks) {
+      if (t.album == null) continue;
+      groups.putIfAbsent('${t.album}|${t.artist}', () => []).add(t);
+    }
+    final list = [
+      for (final g in groups.values)
+        if (g.length > 1)
+          Album(title: g.first.album!, artist: g.first.artist, tracks: g),
+    ];
+    // Keep the source's order (newest first for local files).
+    return list;
+  }();
 
   /// Songs that stand alone: no album, or the only song of theirs here.
-  List<Track> get singles {
+  List<Track> get singles => _singles ??= () {
     final inAlbums = {for (final a in albums) ...a.tracks.map((t) => t.key)};
-    return [for (final t in _tracks) if (!inAlbums.contains(t.key)) t];
-  }
+    return [
+      for (final t in _tracks)
+        if (!inAlbums.contains(t.key)) t,
+    ];
+  }();
+  List<Track>? _singles;
 
-  List<Track> byArtist(String artist) =>
-      [for (final t in _tracks) if (t.artist == artist) t];
+  final _byArtist = <String, List<Track>>{};
 
-  List<Track> addedSince(DateTime when) =>
-      [for (final t in _tracks) if (t.added != null && t.added!.isAfter(when)) t];
+  List<Track> byArtist(String artist) => _byArtist.putIfAbsent(
+    artist,
+    () => [
+      for (final t in _tracks)
+        if (t.artist == artist) t,
+    ],
+  );
+
+  List<Track> addedSince(DateTime when) => [
+    for (final t in _tracks)
+      if (t.added != null && t.added!.isAfter(when)) t,
+  ];
 
   /// Songs for a mood, by Beat Sense's energy reading. Songs not yet
   /// analysed fill in (in a stable order) until enough are known.
@@ -115,8 +133,8 @@ class LibraryController extends ChangeNotifier {
       final fits = energy == null
           ? null
           : mood == Mood.chill
-              ? energy < 0.45
-              : energy > 0.62;
+          ? energy < 0.45
+          : energy > 0.62;
       if (fits == true) {
         picked.add(t);
       } else if (fits == null) {
@@ -126,26 +144,38 @@ class LibraryController extends ChangeNotifier {
     if (_demo) {
       // Samples have no audio: go by their artwork's mood.
       final style = mood == Mood.chill ? ArtStyle.lake : ArtStyle.dust;
-      return [for (final t in _tracks) if ((t.artwork as PaintedArtwork).style == style) t];
+      return [
+        for (final t in _tracks)
+          if ((t.artwork as PaintedArtwork).style == style) t,
+      ];
     }
-    rest.sort((a, b) => (a.key.hashCode ^ mood.index).compareTo(b.key.hashCode ^ mood.index));
+    rest.sort(
+      (a, b) =>
+          (a.key.hashCode ^ mood.index).compareTo(b.key.hashCode ^ mood.index),
+    );
     return [...picked, ...rest].take(size).toList();
   }
 
   /// Artists with enough songs for a mix of their own.
-  List<String> get mixArtists {
+  List<String> get mixArtists => _mixArtists ??= () {
     final counts = <String, int>{};
     for (final t in _tracks) {
       counts[t.artist] = (counts[t.artist] ?? 0) + 1;
     }
-    return [for (final e in counts.entries) if (e.value >= 3) e.key];
-  }
+    return [
+      for (final e in counts.entries)
+        if (e.value >= 3) e.key,
+    ];
+  }();
+  List<String>? _mixArtists;
 
   /// One song per day, stable for the whole day.
   Track? get songOfTheDay {
     if (_tracks.isEmpty) return null;
     final now = DateTime.now();
-    final day = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch ~/ 86400000;
+    final day =
+        DateTime(now.year, now.month, now.day).millisecondsSinceEpoch ~/
+        86400000;
     return _tracks[day % _tracks.length];
   }
 }

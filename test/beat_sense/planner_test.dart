@@ -60,16 +60,22 @@ void main() {
     test('long intros are entered so the drop lands as the blend ends', () {
       final a = track(), b = track(introBars: 16);
       final plan = planner.plan(a, b);
-      expect(plan.entryAt + plan.length * plan.incomingRate,
-          closeTo(b.introEnd, b.beatLength));
+      expect(
+        plan.entryAt + plan.length * plan.incomingRate,
+        closeTo(b.introEnd, b.beatLength),
+      );
     });
 
     test('blends neighbouring keys and swaps bass on clashing ones', () {
       final a = track(key: const MusicalKey(9, minor: true));
-      expect(planner.plan(a, track(key: const MusicalKey(4, minor: true))).style,
-          TransitionStyle.blend);
-      expect(planner.plan(a, track(key: const MusicalKey(3, minor: true))).style,
-          TransitionStyle.bassSwap);
+      expect(
+        planner.plan(a, track(key: const MusicalKey(4, minor: true))).style,
+        TransitionStyle.blend,
+      );
+      expect(
+        planner.plan(a, track(key: const MusicalKey(3, minor: true))).style,
+        TransitionStyle.bassSwap,
+      );
     });
 
     test('half-time tempos match without a rate change', () {
@@ -91,12 +97,16 @@ void main() {
 
     test('levels are equal power and the bass swaps halfway', () {
       final plan = planner.plan(
-          track(), track(key: const MusicalKey(3, minor: true)));
+        track(),
+        track(key: const MusicalKey(3, minor: true)),
+      );
       expect(plan.style, TransitionStyle.bassSwap);
       for (var x = 0.0; x <= 1.0; x += 0.1) {
         final l = plan.levelsAt(x);
-        expect(l.outgoing * l.outgoing + l.incoming * l.incoming,
-            closeTo(1, 1e-9));
+        expect(
+          l.outgoing * l.outgoing + l.incoming * l.incoming,
+          closeTo(1, 1e-9),
+        );
       }
       expect(plan.levelsAt(0.25).incomingBassDb, MixLevels.bassCut);
       expect(plan.levelsAt(0.75).outgoingBassDb, MixLevels.bassCut);
@@ -124,14 +134,20 @@ void main() {
     const scorer = NextTrackScorer();
     final current = track(bpm: 124, key: const MusicalKey(9, minor: true));
 
-    Candidate<String> c(String id, TrackAnalysis a,
-            {String artist = 'Other', double affinity = 0.5}) =>
-        Candidate(item: id, analysis: a, artist: artist, affinity: affinity);
+    Candidate<String> c(
+      String id,
+      TrackAnalysis a, {
+      String artist = 'Other',
+      double affinity = 0.5,
+    }) => Candidate(item: id, analysis: a, artist: artist, affinity: affinity);
 
     test('prefers matching tempo and key', () {
       final ranked = scorer.rank(current, 'Me', [
         c('far tempo', track(bpm: 95)),
-        c('clashing key', track(bpm: 124, key: const MusicalKey(3, minor: false))),
+        c(
+          'clashing key',
+          track(bpm: 124, key: const MusicalKey(3, minor: false)),
+        ),
         c('perfect', track(bpm: 123, key: const MusicalKey(4, minor: true))),
       ]);
       expect(ranked.first.candidate.item, 'perfect');

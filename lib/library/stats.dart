@@ -17,7 +17,8 @@ class ListeningStats extends ChangeNotifier {
   DateTime? _lastTick;
   int _unsaved = 0;
 
-  static String _month(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
+  static String _month(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}';
 
   double get hoursThisMonth =>
       (_secondsByMonth[_month(DateTime.now())] ?? 0) / 3600;
@@ -34,9 +35,12 @@ class ListeningStats extends ChangeNotifier {
   Future<void> attach(PlaybackController player) async {
     if (!kIsWeb) {
       try {
-        _file = File('${(await getApplicationSupportDirectory()).path}/stats.json');
+        _file = File(
+          '${(await getApplicationSupportDirectory()).path}/stats.json',
+        );
         if (await _file!.exists()) {
-          final json = jsonDecode(await _file!.readAsString()) as Map<String, dynamic>;
+          final json =
+              jsonDecode(await _file!.readAsString()) as Map<String, dynamic>;
           _secondsByMonth.addAll((json['months'] as Map).cast<String, int>());
           _plays.addAll((json['plays'] as Map).cast<String, int>());
         }
@@ -75,7 +79,9 @@ class ListeningStats extends ChangeNotifier {
     final f = _file;
     if (f == null) return;
     try {
-      await f.writeAsString(jsonEncode({'months': _secondsByMonth, 'plays': _plays}));
+      await f.writeAsString(
+        jsonEncode({'months': _secondsByMonth, 'plays': _plays}),
+      );
     } catch (_) {}
   }
 

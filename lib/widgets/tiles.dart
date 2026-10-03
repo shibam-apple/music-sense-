@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../library/models.dart';
 import '../theme/tokens.dart';
@@ -33,8 +34,9 @@ class MetroTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final onArt = art != null;
-    final foreground =
-        tone == TileTone.light && !onArt ? MsColors.ink : Colors.white;
+    final foreground = tone == TileTone.light && !onArt
+        ? MsColors.ink
+        : Colors.white;
     final background = switch (tone) {
       TileTone.dark => MsColors.tileDark,
       TileTone.accent => MsColors.accent,
@@ -61,8 +63,9 @@ class MetroTile extends StatelessWidget {
               if (label != null)
                 const DecoratedBox(
                   decoration: BoxDecoration(
-                    borderRadius:
-                        BorderRadius.all(Radius.circular(MsSizes.tileRadius)),
+                    borderRadius: BorderRadius.all(
+                      Radius.circular(MsSizes.tileRadius),
+                    ),
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
@@ -87,8 +90,10 @@ class MetroTile extends StatelessWidget {
                   if (icon != null) Icon(icon, size: 17, color: foreground),
                   const Spacer(),
                   if (number != null)
-                    Text(number!,
-                        style: MsText.tileNumber.copyWith(color: foreground)),
+                    Text(
+                      number!,
+                      style: MsText.tileNumber.copyWith(color: foreground),
+                    ),
                   if (number != null) const SizedBox(height: 5),
                   if (label != null)
                     Text(
@@ -97,8 +102,9 @@ class MetroTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: MsText.tileLabel.copyWith(
                         color: foreground,
-                        fontWeight:
-                            number != null ? FontWeight.w500 : FontWeight.w600,
+                        fontWeight: number != null
+                            ? FontWeight.w500
+                            : FontWeight.w600,
                       ),
                     ),
                   if (caption != null)
@@ -127,50 +133,52 @@ class TileGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      const gap = MsSizes.tileGap;
-      final cell = (constraints.maxWidth - gap * 2) / 3;
-      double extent(double cells) => cell * cells + gap * (cells - 1);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = MsSizes.tileGap;
+        final cell = (constraints.maxWidth - gap * 2) / 3;
+        double extent(double cells) => cell * cells + gap * (cells - 1);
 
-      return Column(
-        children: [
-          for (final (i, row) in rows.indexed) ...[
-            if (i > 0) const SizedBox(height: gap),
-            SizedBox(
-              height: extent(row.height),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (final (j, column) in row.columns.indexed) ...[
-                    if (j > 0) const SizedBox(width: gap),
-                    SizedBox(
-                      width: column.span == 0
-                          ? (constraints.maxWidth -
-                                  gap * (row.columns.length - 1)) /
-                              row.columns.length
-                          : extent(column.span),
-                      child: Column(
-                        children: [
-                          for (final (k, tile) in column.tiles.indexed) ...[
-                            if (k > 0) const SizedBox(height: gap),
-                            Expanded(
-                              child: Reveal(
-                                order: i * 3 + j + k,
-                                child: tile,
+        return Column(
+          children: [
+            for (final (i, row) in rows.indexed) ...[
+              if (i > 0) const SizedBox(height: gap),
+              SizedBox(
+                height: extent(row.height),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final (j, column) in row.columns.indexed) ...[
+                      if (j > 0) const SizedBox(width: gap),
+                      SizedBox(
+                        width: column.span == 0
+                            ? (constraints.maxWidth -
+                                      gap * (row.columns.length - 1)) /
+                                  row.columns.length
+                            : extent(column.span),
+                        child: Column(
+                          children: [
+                            for (final (k, tile) in column.tiles.indexed) ...[
+                              if (k > 0) const SizedBox(height: gap),
+                              Expanded(
+                                child: Reveal(
+                                  order: i * 3 + j + k,
+                                  child: tile,
+                                ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
+            ],
           ],
-        ],
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -214,6 +222,7 @@ class MediaRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Pressable(
       onTap: onTap,
+      tilt: 0.04,
       child: SizedBox(
         height: 54,
         child: Row(
@@ -225,17 +234,21 @@ class MediaRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: active
-                          ? MsText.rowTitle.copyWith(color: MsColors.accent)
-                          : MsText.rowTitle),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: active
+                        ? MsText.rowTitle.copyWith(color: MsColors.accent)
+                        : MsText.rowTitle,
+                  ),
                   const SizedBox(height: 3),
-                  Text(subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: MsText.rowSubtitle),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: MsText.rowSubtitle,
+                  ),
                 ],
               ),
             ),
@@ -250,43 +263,105 @@ class MediaRow extends StatelessWidget {
   }
 }
 
-/// Metro press feedback: the element sinks slightly while pressed.
+/// Metro press feedback: the element tilts toward the finger in 3D and
+/// sinks slightly, with a light haptic tick, then springs back.
 class Pressable extends StatefulWidget {
-  const Pressable({super.key, required this.child, this.onTap});
+  const Pressable({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.tilt = 0.14,
+  });
 
   final Widget child;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  /// Maximum tilt in radians at the element's edge.
+  final double tilt;
 
   @override
   State<Pressable> createState() => _PressableState();
 }
 
-class _PressableState extends State<Pressable> {
-  bool _down = false;
+class _PressableState extends State<Pressable>
+    with SingleTickerProviderStateMixin {
+  late final _press = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 110),
+    reverseDuration: const Duration(milliseconds: 320),
+  );
+  late final _curve = CurvedAnimation(
+    parent: _press,
+    curve: Curves.easeOut,
+    reverseCurve: Curves.easeOutBack,
+  );
+  Offset _at = Offset.zero; // -1…1 across the element
 
-  void _set(bool down) {
-    if (_down != down) setState(() => _down = down);
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
   }
+
+  void _down(TapDownDetails d) {
+    final size = context.size ?? Size.zero;
+    if (size.isEmpty) return;
+    _at = Offset(
+      (d.localPosition.dx / size.width * 2 - 1).clamp(-1.0, 1.0),
+      (d.localPosition.dy / size.height * 2 - 1).clamp(-1.0, 1.0),
+    );
+    _press.forward();
+  }
+
+  void _up() => _press.reverse();
 
   @override
   Widget build(BuildContext context) {
+    final enabled = widget.onTap != null || widget.onLongPress != null;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => _set(true),
-      onTapUp: (_) => _set(false),
-      onTapCancel: () => _set(false),
-      onTap: widget.onTap,
-      child: AnimatedScale(
-        scale: _down ? 0.96 : 1,
-        duration: MsMotion.fast,
-        curve: MsMotion.curve,
+      onTapDown: enabled ? _down : null,
+      onTapUp: enabled ? (_) => _up() : null,
+      onTapCancel: enabled ? _up : null,
+      onTap: widget.onTap == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              widget.onTap!();
+            },
+      onLongPress: widget.onLongPress == null
+          ? null
+          : () {
+              HapticFeedback.mediumImpact();
+              _up();
+              widget.onLongPress!();
+            },
+      child: AnimatedBuilder(
+        animation: _curve,
         child: widget.child,
+        builder: (context, child) {
+          final t = _curve.value;
+          if (t == 0) return child!;
+          final m = Matrix4.identity()
+            ..setEntry(3, 2, 0.0012) // perspective
+            ..rotateX(-_at.dy * widget.tilt * t)
+            ..rotateY(_at.dx * widget.tilt * t)
+            ..scaleByDouble(1 - 0.035 * t, 1 - 0.035 * t, 1, 1);
+          return Transform(
+            transform: m,
+            alignment: Alignment.center,
+            child: child,
+          );
+        },
       ),
     );
   }
 }
 
-/// Fades and lifts its child in once, staggered by [order].
+/// Fades and lifts its child in once, staggered by [order]. The stagger is
+/// part of the animation's curve, so no timers are left running.
 class Reveal extends StatefulWidget {
   const Reveal({super.key, required this.child, this.order = 0});
 
@@ -298,20 +373,20 @@ class Reveal extends StatefulWidget {
 }
 
 class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
+  static const _step = 55; // ms between staggered items
+  late final int _delay = (widget.order.clamp(0, 10)) * _step;
   late final _controller = AnimationController(
     vsync: this,
-    duration: MsMotion.slow,
+    duration: MsMotion.slow + Duration(milliseconds: _delay),
+  )..forward();
+  late final _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Interval(
+      _delay / (MsMotion.slow.inMilliseconds + _delay),
+      1,
+      curve: MsMotion.emphasized,
+    ),
   );
-  late final _curve =
-      CurvedAnimation(parent: _controller, curve: MsMotion.emphasized);
-
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration(milliseconds: 60 * widget.order), () {
-      if (mounted) _controller.forward();
-    });
-  }
 
   @override
   void dispose() {
@@ -323,14 +398,18 @@ class _RevealState extends State<Reveal> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _curve,
-      builder: (context, child) => Opacity(
-        opacity: _curve.value,
-        child: Transform.translate(
-          offset: Offset(0, 18 * (1 - _curve.value)),
-          child: child,
-        ),
-      ),
       child: widget.child,
+      builder: (context, child) {
+        final v = _curve.value;
+        if (v >= 1) return child!;
+        return Opacity(
+          opacity: v,
+          child: Transform.translate(
+            offset: Offset(0, 18 * (1 - v)),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }

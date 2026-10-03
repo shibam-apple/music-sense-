@@ -23,6 +23,10 @@ class MixEngine extends PlaybackController {
     this._scorer = const NextTrackScorer(),
   }) {
     for (final deck in _decks) {
+      // Play/pause changes (including from headphones) refresh the pages.
+      deck.audio.playingStream.listen((_) {
+        if (deck == _active) notifyListeners();
+      });
       deck.audio.processingStateStream.listen((state) {
         if (state == ProcessingState.completed && deck == _active && !_mixing) {
           _advance();
@@ -89,7 +93,9 @@ class MixEngine extends PlaybackController {
     if (_beatSense == value) return;
     _beatSense = value;
     if (!value) _cancelPlan();
-    _status = value ? const BeatSenseStatus(BeatSenseState.analysing) : BeatSenseStatus.off;
+    _status = value
+        ? const BeatSenseStatus(BeatSenseState.analysing)
+        : BeatSenseStatus.off;
     if (value) _prepareNext();
     notifyListeners();
   }
@@ -190,12 +196,16 @@ class MixEngine extends PlaybackController {
     final candidates = <Candidate<Track>>[];
     for (final t in fresh) {
       final a = await _analysis.analyse(t);
-      if (a != null) candidates.add(Candidate(item: t, analysis: a, artist: t.artist));
+      if (a != null) {
+        candidates.add(Candidate(item: t, analysis: a, artist: t.artist));
+      }
       if (candidates.length >= 5) break;
     }
     if (candidates.isEmpty) return;
     final recent = _queue.reversed.take(4).map((t) => t.artist).toSet();
-    final best = _scorer.rank(current, seed.artist, candidates, recentArtists: recent).first;
+    final best = _scorer
+        .rank(current, seed.artist, candidates, recentArtists: recent)
+        .first;
     _queue = [..._queue, best.candidate.item];
   }
 
@@ -214,7 +224,8 @@ class MixEngine extends PlaybackController {
   }
 
   Future<void> _conductStep() async {
-    if (++_ticks % 8 == 0) notifyListeners(); // ~4 position updates a second
+    // ~10 position updates a second for the seek bar; pages don't rebuild.
+    if (++_ticks % 3 == 0) positionListenable.value = _active.audio.position;
     _rampBack();
 
     final plan = _plan;
@@ -222,7 +233,8 @@ class MixEngine extends PlaybackController {
     final now = _active.seconds;
 
     // Start the incoming deck exactly on the exit downbeat.
-    if (!_incomingStarted && now >= plan.exitAt - _tick.inMicroseconds / 1e6 * 2) {
+    if (!_incomingStarted &&
+        now >= plan.exitAt - _tick.inMicroseconds / 1e6 * 2) {
       if (now > plan.exitAt + 1) {
         // Seeked past the mix point: skip the blend for this song.
         _cancelPlan();
@@ -232,7 +244,11 @@ class MixEngine extends PlaybackController {
       _mixing = true;
       final wait = Duration(microseconds: ((plan.exitAt - now) * 1e6).round());
       Future.delayed(wait.isNegative ? Duration.zero : wait, _incoming.start);
-      _status = BeatSenseStatus(BeatSenseState.mixing, plan: plan, next: _incoming.track);
+      _status = BeatSenseStatus(
+        BeatSenseState.mixing,
+        plan: plan,
+        next: _incoming.track,
+      );
       notifyListeners();
       return;
     }
@@ -248,7 +264,9 @@ class MixEngine extends PlaybackController {
     if (plan.beatMatched && _incoming.playing) {
       final expected = plan.entryAt + (now - plan.exitAt) * plan.incomingRate;
       final drift = _incoming.seconds - expected;
-      final correction = drift.abs() < _driftTolerance ? 0.0 : (-drift * 0.5).clamp(-0.02, 0.02);
+      final correction = drift.abs() < _driftTolerance
+          ? 0.0
+          : (-drift * 0.5).clamp(-0.02, 0.02);
       await _incoming.setRate(plan.incomingRate * (1 + correction));
     }
 
@@ -281,7 +299,8 @@ class MixEngine extends PlaybackController {
   void _rampBack() {
     final from = _rampFrom, start = _rampStart;
     if (from == null || start == null || _mixing) return;
-    final t = DateTime.now().difference(start).inMicroseconds / 1e6 / _rampSeconds;
+    final t =
+        DateTime.now().difference(start).inMicroseconds / 1e6 / _rampSeconds;
     if (t >= 1) {
       _rampFrom = null;
       unawaited(_active.setRate(1));
@@ -331,7 +350,11 @@ class MixEngine extends PlaybackController {
     if (plan != null && target > plan.exitAt) {
       _cancelPlan();
     }
-    unawaited(_active.seek(target).then((_) => notifyListeners()));
+    unawaited(
+      _active.seek(target).then((_) {
+        positionListenable.value = _active.audio.position;
+      }),
+    );
   }
 
   @override

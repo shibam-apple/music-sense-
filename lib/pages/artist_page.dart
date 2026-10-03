@@ -9,6 +9,7 @@ import '../widgets/ambient.dart';
 import '../widgets/artwork.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
+import 'music_page.dart' show SongList;
 
 /// 6 · Artist — the current song's artist: full-bleed moving cover,
 /// actions, latest release and top songs.
@@ -29,89 +30,111 @@ class ArtistPage extends StatelessWidget {
     final latest = songs.isEmpty ? current : songs.first;
     final albums = library.albums.where((a) => a.artist == artist).toList();
     final release = albums.isNotEmpty ? albums.first : null;
-    final top = library.stats.topOf(songs, count: 1).firstOrNull ?? latest;
+    // Most played first, then the rest in library order.
+    final played = library.stats.topOf(songs);
+    final ranked = [...played, ...songs.where((t) => !played.contains(t))];
 
-    return Stack(
-      children: [
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 0,
-          height: heroHeight,
-          child: _Hero(art: latest?.artwork ?? const PaintedArtwork(ArtStyle.dust)),
-        ),
-        PanoramaPage(
-          title: null,
-          titleTop: heroHeight - 72,
-          width: width,
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return PanoramaPage(
+      id: 'artist',
+      title: null,
+      titleTop: heroHeight - 72,
+      width: width,
+      backdrop: _Hero(
+        art: latest?.artwork ?? const PaintedArtwork(ArtStyle.dust),
+      ),
+      backdropHeight: heroHeight,
+      bodyGap: 30,
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Chip(
+            icon: library.isDemo ? LucideIcons.ticket300 : LucideIcons.music300,
+            label: library.isDemo
+                ? 'Upcoming concerts'
+                : '${songs.length} ${songs.length == 1 ? 'song' : 'songs'} in your library',
+          ),
+          const SizedBox(height: 10),
+          Text(
+            artist,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: MsText.heroTitle,
+          ),
+          const SizedBox(height: 22),
+          Row(
             children: [
-              _Chip(
-                icon: library.isDemo ? LucideIcons.ticket300 : LucideIcons.music300,
-                label: library.isDemo
-                    ? 'Upcoming concerts'
-                    : '${songs.length} ${songs.length == 1 ? 'song' : 'songs'} in your library',
+              _CircleButton(
+                filled: true,
+                size: 54,
+                icon: Icons.play_arrow_rounded,
+                label: 'Play $artist',
+                onTap: songs.isEmpty ? null : () => player.playTracks(songs),
               ),
-              const SizedBox(height: 10),
-              Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis, style: MsText.heroTitle),
-              const SizedBox(height: 22),
-              Row(
-                children: [
-                  _CircleButton(
-                    filled: true,
-                    size: 54,
-                    icon: Icons.play_arrow_rounded,
-                    label: 'Play $artist',
-                    onTap: songs.isEmpty ? null : () => player.playTracks(songs),
-                  ),
-                  const SizedBox(width: 12),
-                  const _CircleButton(icon: LucideIcons.info300, label: 'About'),
-                  const SizedBox(width: 12),
-                  const _CircleButton(icon: LucideIcons.star300, label: 'Follow'),
-                ],
-              ),
-              const SizedBox(height: 26),
-              if (latest != null)
-                Reveal(
-                  child: _ReleaseCard(
-                    art: release?.artwork ?? latest.artwork,
-                    date: _date(latest.added),
-                    title: release?.title ?? latest.title,
-                    subtitle: release == null
-                        ? 'Single · 1 song'
-                        : 'Album · ${release.songCount} songs',
-                    onAdd: () => player.playTracks(release?.tracks ?? [latest]),
-                  ),
-                ),
+              const SizedBox(width: 12),
+              const _CircleButton(icon: LucideIcons.info300, label: 'About'),
+              const SizedBox(width: 12),
+              const _FollowButton(),
             ],
           ),
-          below: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text('top songs', style: MsText.pageTitle.copyWith(fontSize: 19)),
-                  const SizedBox(width: 4),
-                  const Icon(LucideIcons.chevronRight300, size: 16, color: MsColors.inkSecondary),
-                ],
+          const SizedBox(height: 26),
+          if (latest != null)
+            Reveal(
+              child: _ReleaseCard(
+                art: release?.artwork ?? latest.artwork,
+                date: _date(latest.added),
+                title: release?.title ?? latest.title,
+                subtitle: release == null
+                    ? 'Single · 1 song'
+                    : 'Album · ${release.songCount} songs',
+                onAdd: () => player.playTracks(release?.tracks ?? [latest]),
               ),
-              const SizedBox(height: 14),
-              if (top != null)
-                MediaRow(art: top.artwork, title: top.title, subtitle: subtitleOfSong(top)),
-            ],
+            ),
+        ],
+      ),
+      body: SliverMainAxisGroup(
+        slivers: [
+          SliverToBoxAdapter(
+            child: SectionTitle(
+              'top songs',
+              trailing: const Icon(
+                LucideIcons.chevronRight300,
+                size: 16,
+                color: MsColors.inkSecondary,
+              ),
+            ),
           ),
-        ),
-      ],
+          SongList(
+            songs: ranked,
+            current: player.track,
+            subtitle: subtitleOfSong,
+            onTap: (t) => player.playTracks(ranked, start: ranked.indexOf(t)),
+          ),
+        ],
+      ),
     );
   }
 
-  static String subtitleOfSong(Track t) =>
-      [t.album, t.year?.toString()].whereType<String>().join(' · ');
+  static String subtitleOfSong(Track t) {
+    final s = [t.album, t.year?.toString()].whereType<String>().join(' · ');
+    return s.isEmpty ? t.artist : s;
+  }
 
   static String _date(DateTime? d) {
     if (d == null) return '';
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 }
@@ -128,8 +151,10 @@ class _Hero extends StatefulWidget {
 }
 
 class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
-  late final _drift = AnimationController(vsync: this, duration: const Duration(seconds: 24))
-    ..repeat(reverse: true);
+  late final _drift = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 24),
+  )..repeat(reverse: true);
 
   @override
   void dispose() {
@@ -155,7 +180,11 @@ class _HeroState extends State<_Hero> with SingleTickerProviderStateMixin {
             },
             child: AnimatedSwitcher(
               duration: MsMotion.slow,
-              child: Artwork(key: ValueKey(widget.art), art: widget.art, radius: 0),
+              child: Artwork(
+                key: ValueKey(widget.art),
+                art: widget.art,
+                radius: 0,
+              ),
             ),
           ),
         ),
@@ -194,8 +223,13 @@ class _Chip extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: MsColors.ink),
           const SizedBox(width: 6),
-          Text(label,
-              style: MsText.rowSubtitle.copyWith(color: MsColors.ink, fontWeight: FontWeight.w500)),
+          Text(
+            label,
+            style: MsText.rowSubtitle.copyWith(
+              color: MsColors.ink,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
@@ -231,12 +265,76 @@ class _CircleButton extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: filled ? MsColors.ink : Colors.transparent,
-            border: filled ? null : Border.all(color: MsColors.inkTertiary, width: 1),
+            border: filled
+                ? null
+                : Border.all(color: MsColors.inkTertiary, width: 1),
             boxShadow: filled
-                ? [BoxShadow(color: accent.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6))]
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.35),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
+                    ),
+                  ]
                 : null,
           ),
-          child: Icon(icon, size: filled ? 26 : 18, color: filled ? Colors.white : MsColors.ink),
+          child: Icon(
+            icon,
+            size: filled ? 26 : 18,
+            color: filled ? Colors.white : MsColors.ink,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The star: fills with a little pop when tapped.
+class _FollowButton extends StatefulWidget {
+  const _FollowButton();
+
+  @override
+  State<_FollowButton> createState() => _FollowButtonState();
+}
+
+class _FollowButtonState extends State<_FollowButton> {
+  bool _on = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      toggled: _on,
+      label: 'Follow',
+      child: Pressable(
+        onTap: () => setState(() => _on = !_on),
+        child: AnimatedContainer(
+          duration: MsMotion.fast,
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _on
+                ? MsColors.accent.withValues(alpha: 0.1)
+                : Colors.transparent,
+            border: Border.all(
+              color: _on ? MsColors.accent : MsColors.inkTertiary,
+              width: 1,
+            ),
+          ),
+          child: TweenAnimationBuilder<double>(
+            key: ValueKey(_on),
+            tween: Tween(begin: 0.6, end: 1),
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.elasticOut,
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
+            child: Icon(
+              _on ? Icons.star_rounded : LucideIcons.star300,
+              size: _on ? 22 : 18,
+              color: _on ? MsColors.accent : MsColors.ink,
+            ),
+          ),
         ),
       ),
     );
@@ -266,24 +364,38 @@ class _ReleaseCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          SizedBox.square(dimension: 64, child: Artwork(art: art)),
+          SizedBox.square(
+            dimension: 64,
+            child: Glint(
+              delay: const Duration(seconds: 4),
+              child: Artwork(art: art),
+            ),
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (date.isNotEmpty) Text(date, style: MsText.rowSubtitle.copyWith(fontSize: 11)),
+                if (date.isNotEmpty)
+                  Text(date, style: MsText.rowSubtitle.copyWith(fontSize: 11)),
                 const SizedBox(height: 2),
-                Text(title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: MsText.rowTitle.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: MsText.rowTitle.copyWith(fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 2),
                 Text(subtitle, style: MsText.rowSubtitle),
               ],
             ),
           ),
-          _CircleButton(icon: LucideIcons.plus300, label: 'Play $title', size: 32, onTap: onAdd),
+          _CircleButton(
+            icon: LucideIcons.plus300,
+            label: 'Play $title',
+            size: 32,
+            onTap: onAdd,
+          ),
         ],
       ),
     );

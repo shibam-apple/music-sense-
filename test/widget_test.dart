@@ -23,8 +23,7 @@ void main() {
     await settle(tester);
   }
 
-  testWidgets('opens on the music collection with the XMB bar',
-      (tester) async {
+  testWidgets('opens on the music collection with the XMB bar', (tester) async {
     await pumpPhone(tester);
     expect(find.text('music collection'), findsOneWidget);
     expect(find.text('BEAT SENSE · READY'), findsOneWidget);
@@ -33,8 +32,9 @@ void main() {
     }
   });
 
-  testWidgets('tapping a bar icon moves the panorama to that page',
-      (tester) async {
+  testWidgets('tapping a bar icon moves the panorama to that page', (
+    tester,
+  ) async {
     await pumpPhone(tester);
     await tester.tap(find.bySemanticsLabel('Featured'));
     await settle(tester);
@@ -45,7 +45,10 @@ void main() {
   testWidgets('swiping left moves to the next page', (tester) async {
     await pumpPhone(tester);
     await tester.fling(
-        find.text('music collection'), const Offset(-200, 0), 1200);
+      find.text('music collection'),
+      const Offset(-200, 0),
+      1200,
+    );
     await settle(tester);
     final albums = tester.getTopLeft(find.text('albums'));
     expect(albums.dx, closeTo(32, 1));

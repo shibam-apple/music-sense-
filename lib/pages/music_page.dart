@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../library/library.dart';
 import '../library/models.dart';
@@ -9,8 +10,8 @@ import '../widgets/artwork.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
 
-/// 1 · Music — "music collection": recent artwork, the current song and the
-/// song list.
+/// 1 · Music — "music collection": recent artwork, the current song, then
+/// every song, scrolling down through the bar.
 class MusicPage extends StatelessWidget {
   const MusicPage({super.key});
 
@@ -22,10 +23,6 @@ class MusicPage extends StatelessWidget {
     final library = LibraryScope.of(context);
     final songs = library.recent;
     final current = player.track ?? (songs.isEmpty ? null : songs.first);
-    final list = [
-      for (final t in songs)
-        if (t != current) t,
-    ];
 
     void playFrom(Track t) {
       final at = songs.indexOf(t);
@@ -33,12 +30,14 @@ class MusicPage extends StatelessWidget {
     }
 
     return PanoramaPage(
+      id: 'music',
       title: 'music collection',
       titleStyle: MsText.heroTitle,
       titleTop: 44,
       contentGap: 18,
       width: width,
-      content: Column(
+      bodyGap: 18,
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -63,9 +62,18 @@ class MusicPage extends StatelessWidget {
             dimension: width,
             child: current == null
                 ? const SizedBox()
-                : AnimatedSwitcher(
-                    duration: MsMotion.medium,
-                    child: LiveCover(key: ValueKey(current.key), art: current.artwork),
+                : Pressable(
+                    tilt: 0.06,
+                    onTap: () => player.track == null
+                        ? playFrom(current)
+                        : player.toggle(),
+                    child: AnimatedSwitcher(
+                      duration: MsMotion.medium,
+                      child: LiveCover(
+                        key: ValueKey(current.key),
+                        art: current.artwork,
+                      ),
+                    ),
                   ),
           ),
           const SizedBox(height: 18),
@@ -77,10 +85,12 @@ class MusicPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(current?.title ?? '',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: MsText.songTitleLarge.copyWith(fontSize: 21)),
+                    Text(
+                      current?.title ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: MsText.songTitleLarge.copyWith(fontSize: 21),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       subtitleOf(current),
@@ -91,7 +101,7 @@ class MusicPage extends StatelessWidget {
                   ],
                 ),
               ),
-              _PlayPause(
+              PlayPauseButton(
                 playing: player.playing,
                 onTap: () => player.track == null && current != null
                     ? playFrom(current)
@@ -100,30 +110,47 @@ class MusicPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          ProgressLine(value: player.progress),
-          const SizedBox(height: 18),
-          for (final (i, song) in list.take(2).indexed) ...[
-            if (i > 0) const SizedBox(height: 16),
-            Reveal(
-              order: 4 + i,
-              child: MediaRow(
-                art: song.artwork,
-                title: song.title,
-                subtitle: song.artist,
-                onTap: () => playFrom(song),
-              ),
-            ),
-          ],
+          PositionBuilder(
+            builder: (context, p) => ProgressLine(value: p.progress),
+          ),
         ],
       ),
-      below: Column(
-        children: [
-          for (final (i, song) in list.skip(2).take(2).indexed) ...[
-            if (i > 0) const SizedBox(height: 16),
-            MediaRow(art: song.artwork, title: song.title, subtitle: song.artist),
-          ],
-        ],
-      ),
+      body: SongList(songs: songs, current: player.track, onTap: playFrom),
+    );
+  }
+}
+
+/// Every song as a lazily built list; the playing one is marked.
+class SongList extends StatelessWidget {
+  const SongList({
+    super.key,
+    required this.songs,
+    required this.onTap,
+    this.current,
+    this.subtitle,
+  });
+
+  final List<Track> songs;
+  final Track? current;
+  final void Function(Track) onTap;
+  final String Function(Track)? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverList.separated(
+      itemCount: songs.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      itemBuilder: (context, i) {
+        final song = songs[i];
+        final row = MediaRow(
+          art: song.artwork,
+          title: song.title,
+          subtitle: subtitle?.call(song) ?? song.artist,
+          active: song == current,
+          onTap: () => onTap(song),
+        );
+        return i < 6 ? Reveal(order: 4 + i, child: row) : row;
+      },
     );
   }
 }
@@ -147,36 +174,76 @@ class NowPlayingLabel extends StatelessWidget {
         const SizedBox(width: 5),
         AnimatedSwitcher(
           duration: MsMotion.fast,
-          child: Text(status.label, key: ValueKey(status.label), style: MsText.overline),
+          child: Text(
+            status.label,
+            key: ValueKey(status.label),
+            style: MsText.overline,
+          ),
         ),
       ],
     );
   }
 }
 
-class _PlayPause extends StatelessWidget {
-  const _PlayPause({required this.playing, required this.onTap});
+/// Play/pause that morphs between its two shapes.
+class PlayPauseButton extends StatefulWidget {
+  const PlayPauseButton({
+    super.key,
+    required this.playing,
+    required this.onTap,
+    this.size = 26,
+    this.box = 36,
+  });
 
   final bool playing;
   final VoidCallback onTap;
+  final double size;
+  final double box;
+
+  @override
+  State<PlayPauseButton> createState() => _PlayPauseButtonState();
+}
+
+class _PlayPauseButtonState extends State<PlayPauseButton>
+    with SingleTickerProviderStateMixin {
+  late final _morph = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+    value: widget.playing ? 1 : 0,
+  );
+
+  @override
+  void didUpdateWidget(PlayPauseButton old) {
+    super.didUpdateWidget(old);
+    if (old.playing != widget.playing) {
+      widget.playing ? _morph.forward() : _morph.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _morph.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: playing ? 'Pause' : 'Play',
+      label: widget.playing ? 'Pause' : 'Play',
       child: Pressable(
-        onTap: onTap,
+        onTap: widget.onTap,
+        tilt: 0,
         child: SizedBox.square(
-          dimension: 36,
-          child: AnimatedSwitcher(
-            duration: MsMotion.fast,
-            transitionBuilder: (child, animation) =>
-                ScaleTransition(scale: animation, child: child),
-            child: Icon(
-              playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              key: ValueKey(playing),
-              size: 26,
+          dimension: widget.box,
+          child: Center(
+            child: AnimatedIcon(
+              icon: AnimatedIcons.play_pause,
+              progress: CurvedAnimation(
+                parent: _morph,
+                curve: Curves.easeInOutCubic,
+              ),
+              size: widget.size,
               color: MsColors.ink,
             ),
           ),
@@ -204,66 +271,82 @@ class _ProgressLineState extends State<ProgressLine> {
   @override
   Widget build(BuildContext context) {
     final seekable = widget.onSeek != null;
-    return LayoutBuilder(builder: (context, constraints) {
-      final w = constraints.maxWidth;
-      double at(Offset p) => (p.dx / w).clamp(0.0, 1.0);
-      final value = (_drag ?? widget.value).clamp(0.0, 1.0);
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: seekable ? (d) => widget.onSeek!(at(d.localPosition)) : null,
-        onHorizontalDragStart: seekable ? (d) => setState(() => _drag = at(d.localPosition)) : null,
-        onHorizontalDragUpdate: seekable ? (d) => setState(() => _drag = at(d.localPosition)) : null,
-        onHorizontalDragEnd: seekable
-            ? (_) {
-                widget.onSeek!(_drag ?? widget.value);
-                setState(() => _drag = null);
-              }
-            : null,
-        child: SizedBox(
-          height: 16,
-          child: Stack(
-            alignment: Alignment.centerLeft,
-            children: [
-              Container(
-                height: 2.5,
-                decoration: BoxDecoration(
-                  color: MsColors.track,
-                  borderRadius: BorderRadius.circular(2),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        double at(Offset p) => (p.dx / w).clamp(0.0, 1.0);
+        final value = (_drag ?? widget.value).clamp(0.0, 1.0);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: seekable
+              ? (d) => widget.onSeek!(at(d.localPosition))
+              : null,
+          onHorizontalDragStart: seekable
+              ? (d) {
+                  HapticFeedback.selectionClick();
+                  setState(() => _drag = at(d.localPosition));
+                }
+              : null,
+          onHorizontalDragUpdate: seekable
+              ? (d) => setState(() => _drag = at(d.localPosition))
+              : null,
+          onHorizontalDragEnd: seekable
+              ? (_) {
+                  HapticFeedback.lightImpact();
+                  widget.onSeek!(_drag ?? widget.value);
+                  setState(() => _drag = null);
+                }
+              : null,
+          child: SizedBox(
+            height: 16,
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                Container(
+                  height: 2.5,
+                  decoration: BoxDecoration(
+                    color: MsColors.track,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
-              ),
-              Container(
-                width: w * value,
-                height: 2.5,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(2),
-                  gradient: LinearGradient(colors: [
-                    MsColors.accent,
-                    Color.lerp(MsColors.accent, Accent.of(context), 0.5)!,
-                  ]),
-                ),
-              ),
-              if (seekable)
-                Positioned(
-                  left: w * value - 6,
-                  child: AnimatedScale(
-                    scale: _drag == null ? 0 : 1,
-                    duration: MsMotion.fast,
-                    curve: MsMotion.curve,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: const BoxDecoration(
-                        color: MsColors.accent,
-                        shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: Color(0x406F56F8), blurRadius: 8)],
-                      ),
+                Container(
+                  width: w * value,
+                  height: 2.5,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(2),
+                    gradient: LinearGradient(
+                      colors: [
+                        MsColors.accent,
+                        Color.lerp(MsColors.accent, Accent.of(context), 0.5)!,
+                      ],
                     ),
                   ),
                 ),
-            ],
+                if (seekable)
+                  Positioned(
+                    left: w * value - 6,
+                    child: AnimatedScale(
+                      scale: _drag == null ? 0 : 1,
+                      duration: MsMotion.fast,
+                      curve: MsMotion.curve,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: const BoxDecoration(
+                          color: MsColors.accent,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(color: Color(0x406F56F8), blurRadius: 8),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

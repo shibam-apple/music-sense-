@@ -7,13 +7,13 @@ import 'dart:typed_data';
 /// isolates or used re-entrantly.
 class Fft {
   Fft(this.size)
-      : assert(size > 0 && (size & (size - 1)) == 0, 'size must be 2^n'),
-        _re = Float64List(size),
-        _im = Float64List(size),
-        _window = Float64List(size),
-        _cos = Float64List(size ~/ 2),
-        _sin = Float64List(size ~/ 2),
-        _reversed = Int32List(size) {
+    : assert(size > 0 && (size & (size - 1)) == 0, 'size must be 2^n'),
+      _re = Float64List(size),
+      _im = Float64List(size),
+      _window = Float64List(size),
+      _cos = Float64List(size ~/ 2),
+      _sin = Float64List(size ~/ 2),
+      _reversed = Int32List(size) {
     for (var i = 0; i < size; i++) {
       _window[i] = 0.5 - 0.5 * math.cos(2 * math.pi * i / size);
     }

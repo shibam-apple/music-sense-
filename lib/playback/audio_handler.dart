@@ -18,34 +18,39 @@ class MusicSenseAudioHandler extends BaseAudioHandler with SeekHandler {
     final track = _player.track;
     if (track != null && track.key != _lastKey) {
       _lastKey = track.key;
-      mediaItem.add(MediaItem(
-        id: track.key,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        duration: track.duration == Duration.zero ? null : track.duration,
-        artUri: switch (track.artwork) {
-          NetworkArtwork(:final url) => Uri.parse(url),
-          LocalArtwork(:final mediaId) =>
-            Uri.parse('content://media/external/audio/media/$mediaId/albumart'),
-          PaintedArtwork() => null,
-        },
-      ));
+      mediaItem.add(
+        MediaItem(
+          id: track.key,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          duration: track.duration == Duration.zero ? null : track.duration,
+          artUri: switch (track.artwork) {
+            NetworkArtwork(:final url) => Uri.parse(url),
+            LocalArtwork(:final mediaId) => Uri.parse(
+              'content://media/external/audio/media/$mediaId/albumart',
+            ),
+            PaintedArtwork() => null,
+          },
+        ),
+      );
     }
-    playbackState.add(PlaybackState(
-      controls: [
-        MediaControl.skipToPrevious,
-        _player.playing ? MediaControl.pause : MediaControl.play,
-        MediaControl.skipToNext,
-      ],
-      systemActions: const {MediaAction.seek},
-      androidCompactActionIndices: const [0, 1, 2],
-      processingState: track == null
-          ? AudioProcessingState.idle
-          : AudioProcessingState.ready,
-      playing: _player.playing,
-      updatePosition: _player.position,
-    ));
+    playbackState.add(
+      PlaybackState(
+        controls: [
+          MediaControl.skipToPrevious,
+          _player.playing ? MediaControl.pause : MediaControl.play,
+          MediaControl.skipToNext,
+        ],
+        systemActions: const {MediaAction.seek},
+        androidCompactActionIndices: const [0, 1, 2],
+        processingState: track == null
+            ? AudioProcessingState.idle
+            : AudioProcessingState.ready,
+        playing: _player.playing,
+        updatePosition: _player.position,
+      ),
+    );
   }
 
   @override

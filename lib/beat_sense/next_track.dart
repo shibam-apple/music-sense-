@@ -63,8 +63,12 @@ class NextTrackScorer {
     return scored;
   }
 
-  ScoredCandidate<T> _score<T>(TrackAnalysis current, String currentArtist,
-      Candidate<T> c, Set<String> recentArtists) {
+  ScoredCandidate<T> _score<T>(
+    TrackAnalysis current,
+    String currentArtist,
+    Candidate<T> c,
+    Set<String> recentArtists,
+  ) {
     final next = c.analysis;
 
     final rate = TransitionPlanner.matchRate(current.bpm, next.bpm);
@@ -80,7 +84,8 @@ class NextTrackScorer {
       _ => 0.1,
     };
     // Trust the key only as far as both detections are confident.
-    final trust = math.min(current.keyConfidence, next.keyConfidence)
+    final trust = math
+        .min(current.keyConfidence, next.keyConfidence)
         .clamp(0.0, 1.0);
     final key = 0.6 + (keyFit - 0.6) * trust;
 

@@ -6,7 +6,8 @@ import '../theme/tokens.dart';
 import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
-import 'music_page.dart' show ProgressLine, subtitleOf;
+import 'music_page.dart'
+    show PlayPauseButton, ProgressLine, SongList, subtitleOf;
 
 /// 5 · Playing — cover, seek bar, transport, and the queue below the bar.
 class PlayingPage extends StatelessWidget {
@@ -19,14 +20,19 @@ class PlayingPage extends StatelessWidget {
     final player = PlayerScope.of(context);
     final library = LibraryScope.of(context);
     final song = player.track ?? library.recent.firstOrNull;
-    final next = player.upNext.firstOrNull ??
-        library.recent.where((t) => t != song).firstOrNull;
     final status = player.beatSense;
 
+    // Up next: the queue, or (with nothing queued) songs from the library.
+    final upNext = player.upNext.isNotEmpty
+        ? player.upNext
+        : library.recent.where((t) => t != song).take(30).toList();
+
     return PanoramaPage(
+      id: 'playing',
       title: 'now playing',
       width: width,
-      content: Column(
+      bodyGap: 30,
+      header: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox.square(
@@ -44,34 +50,55 @@ class PlayingPage extends StatelessWidget {
                   ),
           ),
           const SizedBox(height: 22),
-          Text(song?.title ?? '',
-              maxLines: 1, overflow: TextOverflow.ellipsis, style: MsText.songTitleLarge),
-          const SizedBox(height: 3),
-          Text(
-            subtitleOf(song),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: MsText.rowSubtitle.copyWith(fontSize: 13),
+          AnimatedSwitcher(
+            duration: MsMotion.medium,
+            child: Column(
+              key: ValueKey(song?.key),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  song?.title ?? '',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: MsText.songTitleLarge,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitleOf(song),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: MsText.rowSubtitle.copyWith(fontSize: 13),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
-          ProgressLine(value: player.progress, onSeek: player.seek),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              Text(formatTime(player.position), style: MsText.time),
-              const Spacer(),
-              if (status.state == BeatSenseState.mixing ||
-                  status.state == BeatSenseState.ready)
-                Text(
-                  status.state == BeatSenseState.mixing
-                      ? 'mixing'
-                      : 'mix in ${formatTime(_untilMix(player))}',
-                  style: MsText.time.copyWith(color: MsColors.accent),
+          PositionBuilder(
+            builder: (context, p) => Column(
+              children: [
+                ProgressLine(value: p.progress, onSeek: p.seek),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text(formatTime(p.position), style: MsText.time),
+                    const Spacer(),
+                    if (status.state == BeatSenseState.mixing ||
+                        status.state == BeatSenseState.ready)
+                      Text(
+                        status.state == BeatSenseState.mixing
+                            ? 'mixing'
+                            : 'mix in ${formatTime(_untilMix(p))}',
+                        style: MsText.time.copyWith(color: MsColors.accent),
+                      ),
+                    const Spacer(),
+                    Text(
+                      '-${formatTime(p.duration - p.position)}',
+                      style: MsText.time,
+                    ),
+                  ],
                 ),
-              const Spacer(),
-              Text('-${formatTime(player.duration - player.position)}',
-                  style: MsText.time),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 28),
           Row(
@@ -84,12 +111,15 @@ class PlayingPage extends StatelessWidget {
                 onTap: player.previous,
               ),
               const SizedBox(width: 40),
-              _Transport(
-                icon: player.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              PlayPauseButton(
+                playing: player.playing,
                 size: 44,
-                label: player.playing ? 'Pause' : 'Play',
+                box: 56,
                 onTap: () => player.track == null && song != null
-                    ? player.playTracks(library.recent, start: library.recent.indexOf(song))
+                    ? player.playTracks(
+                        library.recent,
+                        start: library.recent.indexOf(song),
+                      )
                     : player.toggle(),
               ),
               const SizedBox(width: 40),
@@ -103,13 +133,18 @@ class PlayingPage extends StatelessWidget {
           ),
         ],
       ),
-      below: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('up next', style: MsText.pageTitle.copyWith(fontSize: 19)),
-          const SizedBox(height: 14),
-          if (next != null)
-            MediaRow(art: next.artwork, title: next.title, subtitle: next.artist),
+      body: SliverMainAxisGroup(
+        slivers: [
+          const SliverToBoxAdapter(child: SectionTitle('up next')),
+          SongList(
+            songs: upNext,
+            onTap: (t) {
+              final at = player.queue.indexOf(t);
+              at >= 0
+                  ? player.playTracks(player.queue, start: at)
+                  : player.playTracks(upNext, start: upNext.indexOf(t));
+            },
+          ),
         ],
       ),
     );
@@ -150,7 +185,12 @@ class _Transport extends StatelessWidget {
               duration: MsMotion.fast,
               transitionBuilder: (child, animation) =>
                   ScaleTransition(scale: animation, child: child),
-              child: Icon(icon, key: ValueKey(icon), size: size, color: MsColors.ink),
+              child: Icon(
+                icon,
+                key: ValueKey(icon),
+                size: size,
+                color: MsColors.ink,
+              ),
             ),
           ),
         ),
@@ -158,4 +198,3 @@ class _Transport extends StatelessWidget {
     );
   }
 }
-

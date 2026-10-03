@@ -52,7 +52,10 @@ void main() {
   group('key', () {
     test('A minor progression reads as A minor (8A)', () {
       final a = analyzer.analyze(
-        drumLoop(bpm: 110, progression: ['Am', 'Am', 'Dm', 'E', 'Am', 'F', 'E', 'Am']),
+        drumLoop(
+          bpm: 110,
+          progression: ['Am', 'Am', 'Dm', 'E', 'Am', 'F', 'E', 'Am'],
+        ),
         sr,
       );
       expect(a.key, const MusicalKey(9, minor: true));
@@ -61,7 +64,10 @@ void main() {
 
     test('C major progression reads as C major (8B)', () {
       final a = analyzer.analyze(
-        drumLoop(bpm: 110, progression: ['C', 'C', 'F', 'G', 'C', 'Am', 'G', 'C']),
+        drumLoop(
+          bpm: 110,
+          progression: ['C', 'C', 'F', 'G', 'C', 'Am', 'G', 'C'],
+        ),
         sr,
       );
       expect(a.key, const MusicalKey(0, minor: false));
@@ -71,7 +77,10 @@ void main() {
 
   test('loudness follows gain', () {
     final full = analyzer.analyze(drumLoop(bpm: 120, seconds: 20), sr);
-    final half = analyzer.analyze(drumLoop(bpm: 120, seconds: 20, gain: 0.5), sr);
+    final half = analyzer.analyze(
+      drumLoop(bpm: 120, seconds: 20, gain: 0.5),
+      sr,
+    );
     expect(full.loudnessDb - half.loudnessDb, closeTo(6.02, 0.5));
   });
 

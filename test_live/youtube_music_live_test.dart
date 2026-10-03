@@ -25,7 +25,9 @@ void main() {
       if (depth > 14) return;
       if (n is Map) {
         for (final e in n.entries) {
-          if ((e.key as String).endsWith('Renderer')) renderers.add(e.key as String);
+          if ((e.key as String).endsWith('Renderer')) {
+            renderers.add(e.key as String);
+          }
           walk(e.value, depth + 1);
         }
       } else if (n is List) {
@@ -47,7 +49,9 @@ void main() {
     describe('search', raw);
     searched = await source.search('Daft Punk Get Lucky');
     for (final t in searched.take(5)) {
-      print('  search: ${t.id} | ${t.title} | ${t.artist} | ${t.album} | ${t.duration} | ${(t.artwork as dynamic).url ?? ''}');
+      print(
+        '  search: ${t.id} | ${t.title} | ${t.artist} | ${t.album} | ${t.duration} | ${(t.artwork as dynamic).url ?? ''}',
+      );
     }
     expect(searched, isNotEmpty);
     expect(searched.first.id, hasLength(11));
@@ -58,7 +62,9 @@ void main() {
     describe('home', raw);
     final shelves = await source.home();
     for (final (title, songs) in shelves.take(6)) {
-      print('  shelf "$title": ${songs.length} songs, e.g. ${songs.take(2).map((s) => '${s.title} / ${s.artist}').join('; ')}');
+      print(
+        '  shelf "$title": ${songs.length} songs, e.g. ${songs.take(2).map((s) => '${s.title} / ${s.artist}').join('; ')}',
+      );
     }
     expect(shelves, isNotEmpty);
   });
@@ -67,19 +73,31 @@ void main() {
     final raw = await api.charts();
     describe('charts', raw);
     final charts = await source.charts();
-    print('  charts: ${charts.length} songs, e.g. ${charts.take(3).map((s) => s.title).join('; ')}');
+    print(
+      '  charts: ${charts.length} songs, e.g. ${charts.take(3).map((s) => '${s.title} / ${s.artist}').join('; ')}',
+    );
+    expect(charts, isNotEmpty);
   });
 
   test('radio continues from a song', () async {
     final related = await source.related(searched.first);
-    print('  radio: ${related.length} songs, e.g. ${related.take(3).map((s) => '${s.title} / ${s.artist}').join('; ')}');
+    print(
+      '  radio: ${related.length} songs, e.g. ${related.take(3).map((s) => '${s.title} / ${s.artist}').join('; ')}',
+    );
     expect(related, isNotEmpty);
+  });
+
+  test('which stream clients work', () async {
+    final results = await source.probe(searched.first.id);
+    results.forEach((client, result) => print('  client $client: $result'));
   });
 
   test('stream resolves and downloads', () async {
     final t = searched.first;
     final ref = await source.resolve(t);
-    print('  stream host: ${ref.uri.host}, itag ${ref.uri.queryParameters['itag']}, mime ${ref.uri.queryParameters['mime']}');
+    print(
+      '  stream host: ${ref.uri.host}, itag ${ref.uri.queryParameters['itag']}, mime ${ref.uri.queryParameters['mime']}',
+    );
     final client = HttpClient();
     final req = await client.getUrl(ref.uri);
     ref.headers.forEach(req.headers.set);
@@ -94,11 +112,18 @@ void main() {
 
   test('raw InnerTube search status', () async {
     final r = await http.post(
-      Uri.parse('https://music.youtube.com/youtubei/v1/search?prettyPrint=false'),
+      Uri.parse(
+        'https://music.youtube.com/youtubei/v1/search?prettyPrint=false',
+      ),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'context': {
-          'client': {'clientName': 'WEB_REMIX', 'clientVersion': '1.20250929.01.00', 'hl': 'en', 'gl': 'US'},
+          'client': {
+            'clientName': 'WEB_REMIX',
+            'clientVersion': '1.20250929.01.00',
+            'hl': 'en',
+            'gl': 'US',
+          },
         },
         'query': 'test',
       }),

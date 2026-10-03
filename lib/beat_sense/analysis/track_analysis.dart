@@ -52,21 +52,21 @@ class TrackAnalysis {
   double get beatLength => 60 / bpm;
 
   Map<String, Object> toJson() => {
-        'v': version,
-        'duration': duration,
-        'bpm': bpm,
-        'beatConfidence': beatConfidence,
-        'beats': beats,
-        'downbeats': downbeats,
-        'phrases': phrases,
-        'key': key.index,
-        'keyConfidence': keyConfidence,
-        'loudnessDb': loudnessDb,
-        'energy': energy,
-        'barEnergy': barEnergy,
-        'introEnd': introEnd,
-        'outroStart': outroStart,
-      };
+    'v': version,
+    'duration': duration,
+    'bpm': bpm,
+    'beatConfidence': beatConfidence,
+    'beats': beats,
+    'downbeats': downbeats,
+    'phrases': phrases,
+    'key': key.index,
+    'keyConfidence': keyConfidence,
+    'loudnessDb': loudnessDb,
+    'energy': energy,
+    'barEnergy': barEnergy,
+    'introEnd': introEnd,
+    'outroStart': outroStart,
+  };
 
   /// Returns null when [json] came from another analysis version.
   static TrackAnalysis? fromJson(Map<String, dynamic> json) {

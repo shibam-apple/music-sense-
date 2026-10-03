@@ -46,7 +46,8 @@ class LocalSource extends MusicSource {
           : DateTime.fromMillisecondsSinceEpoch(added * 1000),
       artwork: LocalArtwork(
         id,
-        fallback: ArtStyle.values[title.hashCode.abs() % ArtStyle.values.length],
+        fallback:
+            ArtStyle.values[title.hashCode.abs() % ArtStyle.values.length],
       ),
     );
   }
@@ -56,8 +57,8 @@ class LocalSource extends MusicSource {
       value == null || value.isEmpty || value == '<unknown>' ? null : value;
 
   @override
-  Future<StreamRef> resolve(Track track) async => StreamRef(Uri.parse(
-      'content://media/external/audio/media/${track.id}'));
+  Future<StreamRef> resolve(Track track) async =>
+      StreamRef(Uri.parse('content://media/external/audio/media/${track.id}'));
 
   /// JPEG cover bytes for a local song, or null.
   static Future<Uint8List?> artwork(int mediaId, {int size = 512}) =>

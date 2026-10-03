@@ -11,6 +11,12 @@ mkdir -p build/screenshots
 adb wait-for-device
 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 1; done'
 
+# Shared storage mounts a little after boot completes.
+for i in $(seq 1 60); do
+  adb shell mkdir -p /sdcard/Music 2>/dev/null && adb shell test -d /sdcard/Music && break
+  sleep 2
+done
+
 adb push build/test_songs/beat_test_120.mp3 build/test_songs/beat_test_124.mp3 /sdcard/Music/
 for f in beat_test_120 beat_test_124; do
   adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \

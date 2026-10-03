@@ -2,17 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:music_sense/sources/youtube_music/innertube.dart';
 
 Map<String, Object> runs(List<String> texts) => {
-      'runs': [for (final t in texts) {'text': t}],
-    };
+  'runs': [
+    for (final t in texts) {'text': t},
+  ],
+};
 
 Map<String, Object> thumbs(String url) => {
-      'thumbnail': {
-        'thumbnails': [
-          {'url': '$url=w60-h60-l90-rj', 'width': 60},
-          {'url': '$url=w120-h120-l90-rj', 'width': 120},
-        ],
-      },
-    };
+  'thumbnail': {
+    'thumbnails': [
+      {'url': '$url=w60-h60-l90-rj', 'width': 60},
+      {'url': '$url=w120-h120-l90-rj', 'width': 120},
+    ],
+  },
+};
 
 /// Shaped like a songs-filtered search response.
 final search = {
@@ -30,12 +32,24 @@ final search = {
                       'contents': [
                         {
                           'musicResponsiveListItemRenderer': {
-                            'thumbnail': {'musicThumbnailRenderer': thumbs('https://lh3/a')},
+                            'thumbnail': {
+                              'musicThumbnailRenderer': thumbs('https://lh3/a'),
+                            },
                             'flexColumns': [
-                              {'musicResponsiveListItemFlexColumnRenderer': {'text': runs(['Midnight City'])}},
                               {
                                 'musicResponsiveListItemFlexColumnRenderer': {
-                                  'text': runs(['M83', ' • ', 'Hurry Up, We\'re Dreaming', ' • ', '4:04']),
+                                  'text': runs(['Midnight City']),
+                                },
+                              },
+                              {
+                                'musicResponsiveListItemFlexColumnRenderer': {
+                                  'text': runs([
+                                    'M83',
+                                    ' • ',
+                                    'Hurry Up, We\'re Dreaming',
+                                    ' • ',
+                                    '4:04',
+                                  ]),
                                 },
                               },
                             ],
@@ -45,14 +59,32 @@ final search = {
                         {
                           'musicResponsiveListItemRenderer': {
                             'flexColumns': [
-                              {'musicResponsiveListItemFlexColumnRenderer': {'text': runs(['Wait'])}},
-                              {'musicResponsiveListItemFlexColumnRenderer': {'text': runs(['Song', ' • ', 'M83', ' • ', '5:43'])}},
+                              {
+                                'musicResponsiveListItemFlexColumnRenderer': {
+                                  'text': runs(['Wait']),
+                                },
+                              },
+                              {
+                                'musicResponsiveListItemFlexColumnRenderer': {
+                                  'text': runs([
+                                    'Song',
+                                    ' • ',
+                                    'M83',
+                                    ' • ',
+                                    '5:43',
+                                  ]),
+                                },
+                              },
                             ],
                             'overlay': {
                               'musicItemThumbnailOverlayRenderer': {
                                 'content': {
                                   'musicPlayButtonRenderer': {
-                                    'playNavigationEndpoint': {'watchEndpoint': {'videoId': 'lAwYodrBr2Q'}},
+                                    'playNavigationEndpoint': {
+                                      'watchEndpoint': {
+                                        'videoId': 'lAwYodrBr2Q',
+                                      },
+                                    },
                                   },
                                 },
                               },
@@ -84,22 +116,36 @@ final home = {
                   {
                     'musicCarouselShelfRenderer': {
                       'header': {
-                        'musicCarouselShelfBasicHeaderRenderer': {'title': runs(['Quick picks'])},
+                        'musicCarouselShelfBasicHeaderRenderer': {
+                          'title': runs(['Quick picks']),
+                        },
                       },
                       'contents': [
                         {
                           'musicTwoRowItemRenderer': {
                             'title': runs(['Starboy']),
-                            'subtitle': runs(['Song', ' • ', 'The Weeknd', ' • ', '2.1B plays']),
-                            'thumbnailRenderer': {'musicThumbnailRenderer': thumbs('https://lh3/b')},
-                            'navigationEndpoint': {'watchEndpoint': {'videoId': '34Na4j8AVgA'}},
+                            'subtitle': runs([
+                              'Song',
+                              ' • ',
+                              'The Weeknd',
+                              ' • ',
+                              '2.1B plays',
+                            ]),
+                            'thumbnailRenderer': {
+                              'musicThumbnailRenderer': thumbs('https://lh3/b'),
+                            },
+                            'navigationEndpoint': {
+                              'watchEndpoint': {'videoId': '34Na4j8AVgA'},
+                            },
                           },
                         },
                         {
                           // An album: no videoId, must be skipped.
                           'musicTwoRowItemRenderer': {
                             'title': runs(['After Hours']),
-                            'navigationEndpoint': {'browseEndpoint': {'browseId': 'MPREb_x'}},
+                            'navigationEndpoint': {
+                              'browseEndpoint': {'browseId': 'MPREb_x'},
+                            },
                           },
                         },
                       ],
@@ -122,7 +168,13 @@ final radio = {
         {
           'playlistPanelVideoRenderer': {
             'title': runs(['Blinding Lights']),
-            'longBylineText': runs(['The Weeknd', ' • ', 'After Hours', ' • ', '2020']),
+            'longBylineText': runs([
+              'The Weeknd',
+              ' • ',
+              'After Hours',
+              ' • ',
+              '2020',
+            ]),
             'lengthText': runs(['3:21']),
             'videoId': '4NRXx6U8ABQ',
             ...thumbs('https://lh3/c'),
@@ -166,8 +218,126 @@ void main() {
     expect(song.duration, const Duration(minutes: 3, seconds: 21));
   });
 
+  test('featured artists stay artists; the album comes from its link', () {
+    Map<String, Object> run(String text, [String? pageType]) => {
+      'text': text,
+      if (pageType != null)
+        'navigationEndpoint': {
+          'browseEndpoint': {
+            'browseEndpointContextSupportedConfigs': {
+              'browseEndpointContextMusicConfig': {'pageType': pageType},
+            },
+          },
+        },
+    };
+    final json = {
+      'musicResponsiveListItemRenderer': {
+        'flexColumns': [
+          {
+            'musicResponsiveListItemFlexColumnRenderer': {
+              'text': runs(['Get Lucky']),
+            },
+          },
+          {
+            'musicResponsiveListItemFlexColumnRenderer': {
+              'text': {
+                'runs': [
+                  run('Song'),
+                  run(' • '),
+                  run('Daft Punk', 'MUSIC_PAGE_TYPE_ARTIST'),
+                  run(', '),
+                  run('Pharrell Williams', 'MUSIC_PAGE_TYPE_ARTIST'),
+                  run(' • '),
+                  run('Random Access Memories', 'MUSIC_PAGE_TYPE_ALBUM'),
+                  run(' • '),
+                  run('6:10'),
+                ],
+              },
+            },
+          },
+        ],
+        'playlistItemData': {'videoId': '4D7u5KF7SP8'},
+      },
+    };
+    final song = InnerTubeParser.songs(json).single;
+    expect(song.artist, 'Daft Punk');
+    expect(song.album, 'Random Access Memories');
+    expect(song.duration, const Duration(minutes: 6, seconds: 10));
+  });
+
+  test('featured artists without links: first name is the artist', () {
+    final json = {
+      'musicResponsiveListItemRenderer': {
+        'flexColumns': [
+          {
+            'musicResponsiveListItemFlexColumnRenderer': {
+              'text': runs(['Get Lucky']),
+            },
+          },
+          {
+            'musicResponsiveListItemFlexColumnRenderer': {
+              'text': runs([
+                'Daft Punk',
+                ', ',
+                'Pharrell Williams',
+                ' & ',
+                'Nile Rodgers',
+                ' • ',
+                'Random Access Memories',
+                ' • ',
+                '6:10',
+              ]),
+            },
+          },
+        ],
+        'playlistItemData': {'videoId': '4D7u5KF7SP8'},
+      },
+    };
+    final song = InnerTubeParser.songs(json).single;
+    expect(song.artist, 'Daft Punk');
+    expect(song.album, 'Random Access Memories');
+  });
+
+  test('finds playlist links on signed-out pages', () {
+    final json = {
+      'musicCarouselShelfRenderer': {
+        'header': {
+          'musicCarouselShelfBasicHeaderRenderer': {
+            'title': runs(['Charts']),
+          },
+        },
+        'contents': [
+          {
+            'musicTwoRowItemRenderer': {
+              'title': runs(['Top 100 Songs Global']),
+              'navigationEndpoint': {
+                'browseEndpoint': {
+                  'browseId': 'VLPL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i',
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+    final shelf = InnerTubeParser.shelves(json).single;
+    expect(shelf.title, 'Charts');
+    expect(shelf.songs, isEmpty);
+    expect(shelf.playlists, ['VLPL4fGSI1pDJn6puJdseH2Rt9sMvt9E2M4i']);
+  });
+
   test('ignores unknown shapes without throwing', () {
-    expect(InnerTubeParser.songs({'weird': [1, 'x', null, {'a': {}}]}), isEmpty);
+    expect(
+      InnerTubeParser.songs({
+        'weird': [
+          1,
+          'x',
+          null,
+          {'a': {}},
+        ],
+      }),
+      isEmpty,
+    );
     expect(InnerTubeParser.shelves(null), isEmpty);
   });
 }

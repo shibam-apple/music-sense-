@@ -8,8 +8,10 @@ import 'playback_controller.dart';
 /// 120 BPM so beat-synced visuals can be previewed without audio.
 class DemoPlayer extends PlaybackController {
   DemoPlayer(List<Track> tracks)
-      : _queue = tracks,
-        _position = const Duration(minutes: 1, seconds: 12);
+    : _queue = tracks,
+      _position = const Duration(minutes: 1, seconds: 12) {
+    positionListenable.value = _position;
+  }
 
   static const _tick = Duration(milliseconds: 250);
 
@@ -80,6 +82,8 @@ class DemoPlayer extends PlaybackController {
     _queue = tracks;
     _index = start.clamp(0, tracks.length - 1);
     _position = Duration.zero;
+    positionListenable.value = _position;
+    notifyListeners();
     play();
   }
 
@@ -93,7 +97,7 @@ class DemoPlayer extends PlaybackController {
         next();
         return;
       }
-      notifyListeners();
+      positionListenable.value = _position;
     });
     notifyListeners();
   }
@@ -108,15 +112,17 @@ class DemoPlayer extends PlaybackController {
   @override
   void seek(double fraction) {
     _position = duration * fraction.clamp(0.0, 1.0);
-    notifyListeners();
+    positionListenable.value = _position;
   }
 
   @override
   void skip(int seconds) {
-    final ms = (_position.inMilliseconds + seconds * 1000)
-        .clamp(0, duration.inMilliseconds);
+    final ms = (_position.inMilliseconds + seconds * 1000).clamp(
+      0,
+      duration.inMilliseconds,
+    );
     _position = Duration(milliseconds: ms);
-    notifyListeners();
+    positionListenable.value = _position;
   }
 
   @override
@@ -124,6 +130,7 @@ class DemoPlayer extends PlaybackController {
     if (_queue.isEmpty) return;
     _index = (_index + 1) % _queue.length;
     _position = Duration.zero;
+    positionListenable.value = _position;
     notifyListeners();
   }
 
@@ -135,6 +142,7 @@ class DemoPlayer extends PlaybackController {
       _index--;
       _position = Duration.zero;
     }
+    positionListenable.value = _position;
     notifyListeners();
   }
 

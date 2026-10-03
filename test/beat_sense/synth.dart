@@ -40,15 +40,23 @@ Float32List drumLoop({
     for (var i = 0; i < (0.12 * sampleRate); i++) {
       final t = i / sampleRate;
       final f = 60 - 25 * t / 0.12;
-      add(start + i,
-          (downbeat ? 0.9 : 0.55) * math.exp(-t * 28) * math.sin(2 * math.pi * f * t));
+      add(
+        start + i,
+        (downbeat ? 0.9 : 0.55) *
+            math.exp(-t * 28) *
+            math.sin(2 * math.pi * f * t),
+      );
     }
     // Snare on 2 and 4.
     if (b % 4 == 1 || b % 4 == 3) {
       for (var i = 0; i < (0.09 * sampleRate); i++) {
         final t = i / sampleRate;
-        add(start + i,
-            0.25 * math.exp(-t * 35) * ((rng.nextDouble() * 2 - 1) + math.sin(2 * math.pi * 190 * t)));
+        add(
+          start + i,
+          0.25 *
+              math.exp(-t * 35) *
+              ((rng.nextDouble() * 2 - 1) + math.sin(2 * math.pi * 190 * t)),
+        );
       }
     }
     // Hi-hat on the off-beat.
@@ -65,7 +73,8 @@ Float32List drumLoop({
     final bar = beat * 4;
     for (var i = 0; i < (seconds * sampleRate); i++) {
       final t = i / sampleRate;
-      final chord = chords[progression[(t / bar).floor() % progression.length]]!;
+      final chord =
+          chords[progression[(t / bar).floor() % progression.length]]!;
       var v = 0.0;
       for (final pc in chord) {
         for (final octave in [3, 4]) {

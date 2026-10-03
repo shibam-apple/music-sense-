@@ -131,10 +131,7 @@ class TransitionPlanner {
   static const minBeatConfidence = 0.35;
 
   TransitionPlan plan(TrackAnalysis from, TrackAnalysis to) {
-    final gains = (
-      out: gainFor(from),
-      inc: gainFor(to),
-    );
+    final gains = (out: gainFor(from), inc: gainFor(to));
 
     if (from.beatConfidence < minBeatConfidence ||
         to.beatConfidence < minBeatConfidence ||
@@ -152,7 +149,8 @@ class TransitionPlanner {
     final blendLength = beats * from.beatLength;
     final exit = _exitPoint(from, blendLength);
     final entry = _entryPoint(to, beats * to.beatLength);
-    final keyClose = from.key.camelotDistance(to.key) <= 1 &&
+    final keyClose =
+        from.key.camelotDistance(to.key) <= 1 &&
         math.min(from.keyConfidence, to.keyConfidence) > 0.15;
     final style = keyClose && (from.energy - to.energy).abs() < 0.2
         ? TransitionStyle.blend
@@ -214,7 +212,11 @@ class TransitionPlanner {
   }
 
   TransitionPlan _cut(
-      TrackAnalysis from, TrackAnalysis to, double outDb, double inDb) {
+    TrackAnalysis from,
+    TrackAnalysis to,
+    double outDb,
+    double inDb,
+  ) {
     final bar = 4 * from.beatLength;
     final exit = _exitPoint(from, bar);
     return TransitionPlan(
@@ -230,7 +232,11 @@ class TransitionPlanner {
   }
 
   TransitionPlan _crossfade(
-      TrackAnalysis from, TrackAnalysis to, double outDb, double inDb) {
+    TrackAnalysis from,
+    TrackAnalysis to,
+    double outDb,
+    double inDb,
+  ) {
     final seconds = switch (length) {
       MixLength.short => 4.0,
       MixLength.medium => 7.0,

@@ -6,8 +6,11 @@ import 'package:http/http.dart' as http;
 /// API music.youtube.com calls. Unofficial: YouTube can change it at any
 /// time, which is why parsing lives in [InnerTubeParser] and is lenient.
 class InnerTubeClient {
-  InnerTubeClient({http.Client? client, this.language = 'en', this.region = 'US'})
-      : _http = client ?? http.Client();
+  InnerTubeClient({
+    http.Client? client,
+    this.language = 'en',
+    this.region = 'US',
+  }) : _http = client ?? http.Client();
 
   final http.Client _http;
   final String language;
@@ -20,16 +23,18 @@ class InnerTubeClient {
   static const songsFilter = 'EgWKAQIIAWoMEA4QChADEAQQCRAF';
 
   Map<String, Object> get _context => {
-        'client': {
-          'clientName': 'WEB_REMIX',
-          'clientVersion': _clientVersion,
-          'hl': language,
-          'gl': region,
-        },
-      };
+    'client': {
+      'clientName': 'WEB_REMIX',
+      'clientVersion': _clientVersion,
+      'hl': language,
+      'gl': region,
+    },
+  };
 
   Future<Map<String, dynamic>> call(
-      String endpoint, Map<String, Object> body) async {
+    String endpoint,
+    Map<String, Object> body,
+  ) async {
     final response = await _http.post(
       Uri.parse('$_base/$endpoint?prettyPrint=false'),
       headers: {
@@ -38,7 +43,7 @@ class InnerTubeClient {
         'Referer': 'https://music.youtube.com/',
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                '(KHTML, like Gecko) Chrome/129.0 Safari/537.36',
+            '(KHTML, like Gecko) Chrome/129.0 Safari/537.36',
         'X-YouTube-Client-Name': '67',
         'X-YouTube-Client-Version': _clientVersion,
       },
@@ -46,8 +51,11 @@ class InnerTubeClient {
     );
     if (response.statusCode != 200) {
       final body = response.body;
-      throw InnerTubeException(endpoint, response.statusCode,
-          body.length > 300 ? body.substring(0, 300) : body);
+      throw InnerTubeException(
+        endpoint,
+        response.statusCode,
+        body.length > 300 ? body.substring(0, 300) : body,
+      );
     }
     return jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
   }
@@ -61,12 +69,16 @@ class InnerTubeClient {
   Future<Map<String, dynamic>> charts() =>
       call('browse', {'browseId': 'FEmusic_charts'});
 
+  /// A playlist or album page by its browse id (e.g. `VL…`).
+  Future<Map<String, dynamic>> browse(String browseId) =>
+      call('browse', {'browseId': browseId});
+
   /// The radio that YouTube Music plays after [videoId].
   Future<Map<String, dynamic>> radio(String videoId) => call('next', {
-        'videoId': videoId,
-        'playlistId': 'RDAMVM$videoId',
-        'isAudioOnly': true,
-      });
+    'videoId': videoId,
+    'playlistId': 'RDAMVM$videoId',
+    'isAudioOnly': true,
+  });
 
   void close() => _http.close();
 }
@@ -103,10 +115,14 @@ class YtSong {
 
 /// A titled row of songs from the home or charts page.
 class YtShelf {
-  const YtShelf(this.title, this.songs);
+  const YtShelf(this.title, this.songs, {this.playlists = const []});
 
   final String title;
   final List<YtSong> songs;
+
+  /// Browse ids of playlists in the row. Signed-out home and charts pages
+  /// list playlists rather than songs; their songs are one browse away.
+  final List<String> playlists;
 }
 
 /// Pulls songs out of InnerTube responses by looking for the item
@@ -130,18 +146,39 @@ abstract final class InnerTubeParser {
     return out;
   }
 
-  /// Home and charts: carousels with a title and songs.
+  /// Home and charts: carousels with a title, their songs and playlists.
   static List<YtShelf> shelves(Object? json) {
     final out = <YtShelf>[];
     _walk(json, (key, node) {
       if (key != 'musicCarouselShelfRenderer' && key != 'musicShelfRenderer') {
         return;
       }
-      final title = _text(_path(node, ['header', 'musicCarouselShelfBasicHeaderRenderer', 'title'])) ??
+      final title =
+          _text(
+            _path(node, [
+              'header',
+              'musicCarouselShelfBasicHeaderRenderer',
+              'title',
+            ]),
+          ) ??
           _text(node['title']) ??
           '';
       final list = songs(node['contents']);
-      if (list.isNotEmpty) out.add(YtShelf(title, list));
+      final lists = playlists(node['contents']);
+      if (list.isNotEmpty || lists.isNotEmpty) {
+        out.add(YtShelf(title, list, playlists: lists));
+      }
+    });
+    return out;
+  }
+
+  /// Playlist browse ids (`VL…`) anywhere in [json], in order.
+  static List<String> playlists(Object? json) {
+    final out = <String>[];
+    _walk(json, (key, node) {
+      if (key != 'browseEndpoint') return;
+      final id = node['browseId'];
+      if (id is String && id.startsWith('VL') && !out.contains(id)) out.add(id);
     });
     return out;
   }
@@ -151,7 +188,7 @@ abstract final class InnerTubeParser {
     if (videoId == null) return null;
 
     String? title;
-    final details = <String>[];
+    final details = <Map>[];
     Duration? duration;
 
     switch (key) {
@@ -159,58 +196,144 @@ abstract final class InnerTubeParser {
         final columns = (node['flexColumns'] as List?) ?? const [];
         final texts = [
           for (final c in columns)
-            _runs(_path(c, ['musicResponsiveListItemFlexColumnRenderer', 'text'])),
+            _runMaps(
+              _path(c, ['musicResponsiveListItemFlexColumnRenderer', 'text']),
+            ),
         ];
         if (texts.isNotEmpty && texts.first.isNotEmpty) {
-          title = texts.first.join();
+          title = texts.first.map((r) => r['text']).join();
         }
-        for (final runs in texts.skip(1)) {
+        for (final (i, runs) in texts.skip(1).indexed) {
+          if (i > 0 && runs.isNotEmpty) details.add(const {'text': ' • '});
           details.addAll(runs);
         }
         final fixed = (node['fixedColumns'] as List?) ?? const [];
         for (final c in fixed) {
           duration ??= _duration(
-              _text(_path(c, ['musicResponsiveListItemFixedColumnRenderer', 'text'])));
+            _text(
+              _path(c, ['musicResponsiveListItemFixedColumnRenderer', 'text']),
+            ),
+          );
         }
       case 'musicTwoRowItemRenderer':
         title = _text(node['title']);
-        details.addAll(_runs(node['subtitle']));
+        details.addAll(_runMaps(node['subtitle']));
       case 'playlistPanelVideoRenderer':
         title = _text(node['title']);
-        details.addAll(_runs(node['longBylineText'] ?? node['shortBylineText']));
+        details.addAll(
+          _runMaps(node['longBylineText'] ?? node['shortBylineText']),
+        );
         duration = _duration(_text(node['lengthText']));
     }
     if (title == null || title.isEmpty) return null;
 
-    // Byline runs look like: Artist • Album • 3:21 (separators are runs).
-    final parts = details
-        .map((s) => s.trim())
-        .where((s) => s.isNotEmpty && s != '•' && s != '&' && s != ',')
-        .where((s) => !const {'Song', 'Video', 'Single', 'EP'}.contains(s))
-        .toList();
-    for (final p in parts) {
-      duration ??= _duration(p);
+    // Prefer YouTube's own link types: artist and album runs say so.
+    String? artist, album;
+    for (final run in details) {
+      final type = _pageType(run);
+      if (type == 'MUSIC_PAGE_TYPE_ARTIST' ||
+          type == 'MUSIC_PAGE_TYPE_USER_CHANNEL') {
+        artist ??= run['text'] as String;
+      } else if (type == 'MUSIC_PAGE_TYPE_ALBUM') {
+        album ??= run['text'] as String;
+      }
     }
-    final words = parts.where((p) => _duration(p) == null && !_isCount(p)).toList();
+
+    // Otherwise read the byline as groups split by " • ":
+    // [type] • artists • album • duration (each part optional).
+    final groups = <List<String>>[[]];
+    for (final run in details) {
+      final text = run['text'] as String;
+      if (text.trim() == '•') {
+        groups.add([]);
+      } else {
+        groups.last.add(text);
+      }
+    }
+    final parts = <List<String>>[];
+    for (final g in groups) {
+      final joined = g.join().trim();
+      if (joined.isEmpty) continue;
+      final d = _duration(joined);
+      if (d != null) {
+        duration ??= d;
+        continue;
+      }
+      if (_isCount(joined) || _typeLabels.contains(joined)) continue;
+      parts.add(g.where((t) => t.trim().isNotEmpty).toList());
+    }
+    // The first name in the artist group is the main artist.
+    artist ??= parts.isNotEmpty ? _firstName(parts.first) : null;
+    album ??= parts.length > 1 && !_isYear(parts[1].join())
+        ? parts[1].join().trim()
+        : null;
 
     return YtSong(
       videoId: videoId,
       title: title,
-      artist: words.isNotEmpty ? words.first : 'Unknown artist',
-      album: words.length > 1 ? words[1] : null,
+      artist: artist ?? 'Unknown artist',
+      album: album,
       duration: duration,
       thumbnail: _thumbnail(node),
     );
   }
 
+  static const _typeLabels = {
+    'Song',
+    'Video',
+    'Single',
+    'EP',
+    'Album',
+    'Episode',
+    'Playlist',
+  };
+
+  static String _firstName(List<String> runs) {
+    for (final r in runs) {
+      final t = r.trim();
+      if (t.isNotEmpty && t != ',' && t != '&') return t;
+    }
+    return runs.join().trim();
+  }
+
+  static bool _isYear(String s) => RegExp(r'^\d{4}$').hasMatch(s.trim());
+
+  static String? _pageType(Map run) => _path(run, [
+    'navigationEndpoint',
+    'browseEndpoint',
+    'browseEndpointContextSupportedConfigs',
+    'browseEndpointContextMusicConfig',
+    'pageType',
+  ]) as String?;
+
+  static List<Map> _runMaps(Object? text) {
+    if (text is! Map) return const [];
+    final runs = text['runs'];
+    if (runs is List) {
+      return [
+        for (final r in runs)
+          if (r is Map && r['text'] is String) r,
+      ];
+    }
+    if (text['simpleText'] is String) {
+      return [
+        {'text': text['simpleText']},
+      ];
+    }
+    return const [];
+  }
+
   static String? _videoId(Map<String, dynamic> node) {
-    final direct = node['videoId'] ??
+    final direct =
+        node['videoId'] ??
         _path(node, ['playlistItemData', 'videoId']) ??
         _path(node, ['navigationEndpoint', 'watchEndpoint', 'videoId']);
     if (direct is String) return direct;
     String? found;
     _walk(node, (key, child) {
-      if (found == null && key == 'watchEndpoint' && child['videoId'] is String) {
+      if (found == null &&
+          key == 'watchEndpoint' &&
+          child['videoId'] is String) {
         found = child['videoId'] as String;
       }
     });
@@ -242,14 +365,19 @@ abstract final class InnerTubeParser {
     );
   }
 
-  static bool _isCount(String s) =>
-      RegExp(r'^[\d.,]+[KMB]? (plays|views)$', caseSensitive: false).hasMatch(s);
+  static bool _isCount(String s) => RegExp(
+    r'^[\d.,]+[KMB]? (plays|views)$',
+    caseSensitive: false,
+  ).hasMatch(s);
 
   static List<String> _runs(Object? text) {
     if (text is! Map) return const [];
     final runs = text['runs'];
     if (runs is List) {
-      return [for (final r in runs) if (r is Map && r['text'] is String) r['text'] as String];
+      return [
+        for (final r in runs)
+          if (r is Map && r['text'] is String) r['text'] as String,
+      ];
     }
     if (text['simpleText'] is String) return [text['simpleText'] as String];
     return const [];
@@ -270,7 +398,9 @@ abstract final class InnerTubeParser {
   }
 
   static void _walk(
-      Object? node, void Function(String key, Map<String, dynamic> value) visit) {
+    Object? node,
+    void Function(String key, Map<String, dynamic> value) visit,
+  ) {
     if (node is Map) {
       for (final e in node.entries) {
         final v = e.value;
