@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 // Live checks against YouTube Music. Needs internet access to YouTube, so
 // it runs in CI (`flutter test test_live`), not in the normal test suite.
 import 'dart:convert';
