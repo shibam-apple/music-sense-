@@ -34,7 +34,6 @@ import java.util.concurrent.Executors
 class MediaBridge(
     private val context: Context,
     messenger: BinaryMessenger,
-    private val activity: Activity,
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
@@ -42,6 +41,13 @@ class MediaBridge(
     }
 
     private var pendingPermission: MethodChannel.Result? = null
+
+    /**
+     * The activity showing the app right now. The bridge lives as long as
+     * the Flutter engine, which audio_service keeps alive across activity
+     * restarts for background playback; activities attach and detach.
+     */
+    var activity: Activity? = null
 
     private val channel = MethodChannel(messenger, "music_sense/media")
     private val worker = Executors.newFixedThreadPool(2)
@@ -51,12 +57,6 @@ class MediaBridge(
 
     init {
         channel.setMethodCallHandler(this)
-    }
-
-    fun dispose() {
-        channel.setMethodCallHandler(null)
-        worker.shutdownNow()
-        youtubeWorker.shutdownNow()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -114,8 +114,13 @@ class MediaBridge(
             result.error("busy", "A permission request is already showing", null)
             return
         }
+        val host = activity
+        if (host == null) {
+            result.success(false)
+            return
+        }
         pendingPermission = result
-        activity.requestPermissions(audioPermissions(), PERMISSION_REQUEST)
+        host.requestPermissions(audioPermissions(), PERMISSION_REQUEST)
     }
 
     /** Forwarded from the activity. */
