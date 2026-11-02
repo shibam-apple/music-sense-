@@ -35,7 +35,13 @@ Android first. What's in the app now:
   - *Local files:* Android MediaStore, with covers and audio decoding in
     `MediaBridge.kt`.
   - *YouTube Music:* optional plugin with home feed, charts, search and radio
-    through YouTube Music's unofficial API, and streams via youtube_explode.
+    through YouTube Music's unofficial API. On Android, songs are found with
+    [NewPipe Extractor](https://github.com/TeamNewPipe/NewPipeExtractor) (the
+    library behind the NewPipe app) and downloaded to a 500 MB cache before
+    playing, so seeking, Beat Sense and replays work like local files;
+    youtube_explode is the fallback. Account → *Check YouTube playback* runs
+    each step on the phone and gives a report to copy. NewPipe Extractor is
+    GPL-3.0, so builds that include it are GPL-3.0 too.
     Build without it with `--dart-define=YT_MUSIC=false`.
 - **Polish, in PlayStation style:**
   - the page glow, the XMB waves and the shadows take their colour from the
@@ -56,7 +62,8 @@ These need a real device and network access this project's build
 environment didn't have:
 - the APK build
 - audio playback and mixing on a phone
-- YouTube Music against live YouTube
+- YouTube Music against live YouTube, including the phone's stream code
+  (`tool/youtube_stream_check.sh`, run on the JVM)
 
 The Kotlin is type-checked against Android 15 APIs with
 `tool/check_android_kotlin.sh`. Because YouTube Music uses an unofficial API,

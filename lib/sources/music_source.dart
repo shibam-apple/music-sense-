@@ -8,6 +8,22 @@ class StreamRef {
   final Map<String, String> headers;
 }
 
+/// A song that couldn't be streamed, with a reason fit to show the
+/// listener. [kind] is short and stable ("bot", "premium", "network"…).
+class StreamFailure implements Exception {
+  const StreamFailure(this.message, {this.kind = 'other'});
+
+  final String message;
+  final String kind;
+
+  /// Every song from the source will fail the same way right now, so
+  /// skipping ahead would only fail again.
+  bool get affectsAll => kind == 'bot' || kind == 'network';
+
+  @override
+  String toString() => message;
+}
+
 /// A provider of tracks: the device's files, a streaming service, …
 /// Sources are plugins; the app works with whichever are enabled.
 abstract class MusicSource {

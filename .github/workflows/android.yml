@@ -78,6 +78,16 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test test_live --reporter expanded
+      - uses: actions/setup-java@v4
+        if: always()
+        with:
+          distribution: temurin
+          java-version: 21
+      # The phone's YouTube path (NewPipe Extractor + cached download),
+      # run as-is on the JVM.
+      - name: YouTube stream check (NewPipe)
+        if: always()
+        run: ./tool/youtube_stream_check.sh
 
   device-test:
     name: Emulator test (playback, Beat Sense, screenshots)

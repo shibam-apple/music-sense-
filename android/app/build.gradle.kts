@@ -12,6 +12,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // NewPipe Extractor uses java.time and other newer Java APIs.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -34,6 +36,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
@@ -46,4 +52,13 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Finds YouTube's audio streams the way the NewPipe app does (GPL-3.0).
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5") {
+        // The javax.script wrapper isn't used (and Android has no javax.script).
+        exclude(group = "org.mozilla", module = "rhino-engine")
+    }
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
 }

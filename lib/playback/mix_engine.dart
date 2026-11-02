@@ -130,8 +130,14 @@ class MixEngine extends PlaybackController {
     } catch (e) {
       debugPrint('Could not play ${current.title}: $e');
       if (generation != _generation) return;
-      message.value = source.id == 'ytm'
-          ? 'YouTube wouldn\'t stream "${current.title}". Skipping.'
+      final failure = e is StreamFailure ? e : null;
+      if (failure != null && failure.affectsAll) {
+        // The next songs would fail the same way; stop and say why.
+        message.value = failure.message;
+        return;
+      }
+      message.value = failure != null
+          ? '${failure.message} Skipping "${current.title}".'
           : 'Couldn\'t play "${current.title}". Skipping.';
       if (_index + 1 < _queue.length) {
         _index++;

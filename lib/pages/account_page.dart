@@ -8,6 +8,7 @@ import '../theme/tokens.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
 import 'sign_in_page.dart';
+import 'youtube_check_page.dart';
 
 /// 7 · Account — YouTube Music sign-in and the app's few settings, as
 /// Metro tiles like every other page.
@@ -35,6 +36,14 @@ class AccountPage extends StatelessWidget {
       label: 'Beat Sense',
       caption: player.beatSenseEnabled ? 'On' : 'Off',
       onTap: () => player.beatSenseEnabled = !player.beatSenseEnabled,
+    );
+
+    final check = MetroTile(
+      tone: TileTone.light,
+      icon: LucideIcons.activity300,
+      label: 'Check YouTube playback',
+      caption: 'Tests streaming on this phone',
+      onTap: youtube == null ? null : () => YouTubeCheckPage.open(context),
     );
 
     return PanoramaPage(
@@ -70,6 +79,10 @@ class AccountPage extends StatelessWidget {
                 ),
               ]),
             ]),
+            if (youtube != null)
+              TileRow([
+                TileColumn(span: 3, [check]),
+              ]),
           ] else ...[
             TileRow(height: 1.5, [
               TileColumn(span: 3, [
@@ -91,6 +104,10 @@ class AccountPage extends StatelessWidget {
                 ),
               ]),
             ]),
+            if (youtube != null)
+              TileRow([
+                TileColumn(span: 3, [check]),
+              ]),
           ],
         ],
       ),

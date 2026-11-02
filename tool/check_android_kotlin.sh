@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Type-checks the app's Kotlin against Android 15 APIs without the Android
 # SDK, for environments where dl.google.com is unavailable. Downloads the
-# Kotlin compiler and Robolectric's android-all jar from Maven Central.
+# Kotlin compiler and Robolectric's android-all jar from Maven Central, and
+# NewPipe Extractor from JitPack.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 work="${TMPDIR:-/tmp}/ms-kotlin-check"
@@ -18,6 +19,8 @@ for a in kotlin-compiler-embeddable kotlin-stdlib kotlin-script-runtime kotlin-r
 done
 get trove4j.jar $M/org/jetbrains/intellij/deps/trove4j/1.0.20200330/trove4j-1.0.20200330.jar
 get annotations.jar $M/org/jetbrains/annotations/13.0/annotations-13.0.jar
+get newpipe.jar https://jitpack.io/com/github/TeamNewPipe/NewPipeExtractor/v0.26.5/NewPipeExtractor-v0.26.5.jar
+get jsr305.jar $M/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar
 get coroutines.jar $M/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.8.0/kotlinx-coroutines-core-jvm-1.8.0.jar
 # Minimal stand-ins for classes that come from AndroidX and plugins.
 echo 'package com.ryanheise.audioservice
@@ -28,6 +31,6 @@ interface LifecycleOwner { val lifecycle: Lifecycle }' > stub/androidx/lifecycle
 rm -rf out
 java -cp kotlin-compiler-embeddable.jar:kotlin-stdlib.jar:kotlin-script-runtime.jar:kotlin-reflect.jar:kotlin-daemon-embeddable.jar:trove4j.jar:annotations.jar:coroutines.jar \
   org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -jvm-target 17 \
-  -classpath android-all.jar:flutter_embedding.jar:kotlin-stdlib.jar -d out \
+  -classpath android-all.jar:flutter_embedding.jar:kotlin-stdlib.jar:newpipe.jar:jsr305.jar -d out \
   "$here"/android/app/src/main/kotlin/com/musicsense/music_sense/*.kt stub/com/ryanheise/audioservice/*.kt stub/androidx/lifecycle/*.kt
 echo "Kotlin OK"

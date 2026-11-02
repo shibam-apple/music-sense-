@@ -45,6 +45,8 @@ class MediaBridge(
 
     private val channel = MethodChannel(messenger, "music_sense/media")
     private val worker = Executors.newFixedThreadPool(2)
+    private val youtubeWorker = Executors.newFixedThreadPool(3)
+    private val youtube by lazy { YouTubeStreams(context.cacheDir) }
     private val main = Handler(Looper.getMainLooper())
 
     init {
@@ -54,6 +56,7 @@ class MediaBridge(
     fun dispose() {
         channel.setMethodCallHandler(null)
         worker.shutdownNow()
+        youtubeWorker.shutdownNow()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -70,6 +73,12 @@ class MediaBridge(
                 result.success(cleared)
             }
             "queryAudio" -> background(result) { queryAudio() }
+            "youtubeFetch" -> youtubeTask(result) {
+                youtube.fetch(call.argument<String>("id")!!, call.argument<String>("cookies"))
+            }
+            "youtubeDiagnose" -> youtubeTask(result) {
+                youtube.diagnose(call.argument<String>("id")!!, call.argument<String>("cookies"))
+            }
             "artwork" -> background(result) {
                 artwork(call.argument<Number>("id")!!.toLong(), call.argument<Int>("size") ?: 512)
             }
@@ -124,6 +133,20 @@ class MediaBridge(
                 main.post { result.success(value) }
             } catch (e: Exception) {
                 main.post { result.error("media_error", e.message, null) }
+            }
+        }
+    }
+
+    /** YouTube work on its own threads; failures carry a readable kind. */
+    private fun youtubeTask(result: MethodChannel.Result, work: () -> Any?) {
+        youtubeWorker.execute {
+            try {
+                val value = work()
+                main.post { result.success(value) }
+            } catch (e: YouTubeStreams.Failure) {
+                main.post { result.error(e.kind, e.message, null) }
+            } catch (e: Throwable) {
+                main.post { result.error("other", e.message ?: e.javaClass.simpleName, null) }
             }
         }
     }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../library/library.dart';
 import '../library/models.dart';
@@ -10,6 +11,7 @@ import '../widgets/ambient.dart';
 import '../widgets/artwork.dart';
 import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
+import 'search_page.dart';
 
 /// 1 · Music — "music collection": recent artwork, the current song, then
 /// every song, scrolling down through the bar.
@@ -43,7 +45,7 @@ class MusicPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              for (final (i, t) in songs.take(7).indexed) ...[
+              for (final (i, t) in songs.take(6).indexed) ...[
                 if (i > 0) const SizedBox(width: 4),
                 SizedBox.square(
                   dimension: 31.5,
@@ -56,6 +58,32 @@ class MusicPage extends StatelessWidget {
                   ),
                 ),
               ],
+              const SizedBox(width: 4),
+              // Search sits in the strip as one more small tile.
+              SizedBox.square(
+                dimension: 31.5,
+                child: Reveal(
+                  order: 6,
+                  child: Semantics(
+                    button: true,
+                    label: 'Search',
+                    child: Pressable(
+                      onTap: () => SearchPage.open(context),
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: MsColors.accent,
+                          borderRadius: BorderRadius.all(Radius.circular(4)),
+                        ),
+                        child: Icon(
+                          LucideIcons.search300,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 18),

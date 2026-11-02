@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 
 import '../../library/models.dart';
+import '../local_source.dart';
 import '../music_source.dart';
 import 'account.dart';
 import 'innertube.dart';
@@ -130,11 +132,68 @@ class YouTubeMusicSource extends MusicSource {
   ];
   YoutubeApiClient? _working;
 
-  @override
-  Future<StreamRef> resolve(Track track) async {
-    final cached = _streams[track.id];
-    if (cached != null && DateTime.now().isBefore(cached.$2)) return cached.$1;
+  /// Songs being fetched right now, so the player and Beat Sense share one
+  /// download.
+  final _fetching = <String, Future<StreamRef>>{};
 
+  @override
+  Future<StreamRef> resolve(Track track) {
+    final cached = _streams[track.id];
+    if (cached != null && DateTime.now().isBefore(cached.$2)) {
+      return Future.value(cached.$1);
+    }
+    return _fetching.putIfAbsent(track.id, () async {
+      try {
+        final ref = await _resolve(track);
+        _streams[track.id] = (
+          ref,
+          DateTime.now().add(const Duration(hours: 4)),
+        );
+        return ref;
+      } finally {
+        _fetching.remove(track.id);
+      }
+    });
+  }
+
+  Future<StreamRef> _resolve(Track track) async {
+    if (defaultTargetPlatform != TargetPlatform.android || kIsWeb) {
+      return _resolveExplode(track);
+    }
+    // On the phone: NewPipe Extractor finds the stream and the song is
+    // downloaded to the cache, then plays like a local file.
+    try {
+      final r = await LocalSource.channel.invokeMapMethod<String, Object?>(
+        'youtubeFetch',
+        {'id': track.id, 'cookies': account?.cookieHeader},
+      );
+      return StreamRef(Uri.file(r!['path']! as String));
+    } on PlatformException catch (e) {
+      final failure = StreamFailure(
+        e.message ?? 'YouTube wouldn\'t play this song.',
+        kind: e.code,
+      );
+      // These are about the song itself; another client won't help.
+      const songSpecific = {
+        'premium',
+        'age',
+        'region',
+        'private',
+        'paid',
+        'network',
+      };
+      if (songSpecific.contains(e.code)) throw failure;
+      debugPrint('YouTube Music: NewPipe failed (${e.code}), trying fallback');
+      try {
+        return await _resolveExplode(track);
+      } catch (_) {
+        throw failure;
+      }
+    }
+  }
+
+  /// The older path: youtube_explode stream URLs, client by client.
+  Future<StreamRef> _resolveExplode(Track track) async {
     // Signed in, the TV client goes first: it honours the session, which
     // gets past YouTube's "confirm you're not a bot" check.
     final preferred = signedIn ? [YoutubeApiClient.tv, ...clients] : clients;
@@ -156,18 +215,31 @@ class YouTubeMusicSource extends MusicSource {
         // Stream URLs are tied to the client that asked; fetch them the same way.
         final agent =
             (client.payload['context']?['client']?['userAgent']) as String?;
-        final ref = StreamRef(best.url, headers: {'User-Agent': ?agent});
         _working = client;
-        _streams[track.id] = (
-          ref,
-          DateTime.now().add(const Duration(hours: 4)),
-        );
-        return ref;
+        return StreamRef(best.url, headers: {'User-Agent': ?agent});
       } catch (e) {
         lastError = e;
       }
     }
     throw lastError ?? StateError('No stream for ${track.id}');
+  }
+
+  /// A step-by-step report on playing [videoId] from this phone, for the
+  /// YouTube check on the Account page.
+  Future<String> diagnose(String videoId) async {
+    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
+      try {
+        return await LocalSource.channel.invokeMethod<String>(
+              'youtubeDiagnose',
+              {'id': videoId, 'cookies': account?.cookieHeader},
+            ) ??
+            '';
+      } on PlatformException catch (e) {
+        return 'failed: ${e.message}';
+      }
+    }
+    final p = await probe(videoId);
+    return p.entries.map((e) => '${e.key}: ${e.value}').join('\n');
   }
 
   /// Which clients can stream [videoId] right now; for diagnostics.
