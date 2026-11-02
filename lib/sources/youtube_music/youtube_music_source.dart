@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:youtube_explode_dart/youtube_explode_dart.dart';
@@ -132,6 +134,10 @@ class YouTubeMusicSource extends MusicSource {
   ];
   YoutubeApiClient? _working;
 
+  /// The real platform (tests report Android as their target platform but
+  /// have no native side).
+  static bool get _onAndroid => !kIsWeb && Platform.isAndroid;
+
   /// Songs being fetched right now, so the player and Beat Sense share one
   /// download.
   final _fetching = <String, Future<StreamRef>>{};
@@ -157,9 +163,7 @@ class YouTubeMusicSource extends MusicSource {
   }
 
   Future<StreamRef> _resolve(Track track) async {
-    if (defaultTargetPlatform != TargetPlatform.android || kIsWeb) {
-      return _resolveExplode(track);
-    }
+    if (!_onAndroid) return _resolveExplode(track);
     // On the phone: NewPipe Extractor finds the stream and the song is
     // downloaded to the cache, then plays like a local file.
     try {
@@ -227,7 +231,7 @@ class YouTubeMusicSource extends MusicSource {
   /// A step-by-step report on playing [videoId] from this phone, for the
   /// YouTube check on the Account page.
   Future<String> diagnose(String videoId) async {
-    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
+    if (_onAndroid) {
       try {
         return await LocalSource.channel.invokeMethod<String>(
               'youtubeDiagnose',
