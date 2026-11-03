@@ -113,6 +113,26 @@ class YouTubeMusicSource extends MusicSource {
   Future<List<Track>> search(String query) async =>
       InnerTubeParser.songs(await _api.searchSongs(query)).map(_track).toList();
 
+  final _artistSongs = <String, Future<List<Track>>>{};
+
+  /// An artist's songs on YouTube Music: a song search for their name,
+  /// keeping the songs actually credited to them. Cached per artist.
+  Future<List<Track>> artistSongs(String artist) {
+    final key = artist.toLowerCase().trim();
+    return _artistSongs.putIfAbsent(key, () async {
+      try {
+        final found = await search(artist);
+        final theirs = found
+            .where((t) => t.artist.toLowerCase().contains(key))
+            .toList();
+        return theirs.isNotEmpty ? theirs : found;
+      } catch (e) {
+        _artistSongs.remove(key); // try again next time
+        rethrow;
+      }
+    });
+  }
+
   @override
   Future<List<Track>> related(Track seed) async =>
       InnerTubeParser.songs(await _api.radio(seed.id))

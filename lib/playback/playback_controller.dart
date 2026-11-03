@@ -70,6 +70,9 @@ abstract class PlaybackController extends ChangeNotifier {
   /// Analysis of the current song, when Beat Sense has it.
   TrackAnalysis? get analysis;
 
+  /// Analysis of the song Beat Sense will mix in next, once known.
+  TrackAnalysis? get nextAnalysis => null;
+
   /// 0–1 position within the current beat, for visuals that pulse in time;
   /// null when the beat isn't known.
   double? get beatPhase {

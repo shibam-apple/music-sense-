@@ -5,6 +5,7 @@ import '../playback/playback_controller.dart';
 import '../theme/tokens.dart';
 import '../widgets/ambient.dart';
 import '../widgets/panorama.dart';
+import '../widgets/mix_card.dart';
 import '../widgets/tiles.dart';
 import 'music_page.dart'
     show PlayPauseButton, ProgressLine, SongList, subtitleOf;
@@ -146,6 +147,8 @@ class PlayingPage extends StatelessWidget {
       ),
       body: SliverMainAxisGroup(
         slivers: [
+          const SliverToBoxAdapter(child: MixCard()),
+          const SliverToBoxAdapter(child: SizedBox(height: 26)),
           const SliverToBoxAdapter(child: SectionTitle('up next')),
           SongList(
             songs: upNext,

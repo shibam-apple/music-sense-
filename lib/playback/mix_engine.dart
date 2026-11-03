@@ -94,6 +94,12 @@ class MixEngine extends PlaybackController {
   @override
   TrackAnalysis? get analysis => _active.analysis;
   @override
+  TrackAnalysis? get nextAnalysis {
+    final next = _status.next;
+    return next == null ? null : _analysis.cached(next);
+  }
+
+  @override
   BeatSenseStatus get beatSense => _status;
   @override
   bool get beatSenseEnabled => _beatSense;

@@ -229,7 +229,14 @@ class SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(top: 6, bottom: 14),
       child: Row(
         children: [
-          Text(text, style: MsText.pageTitle.copyWith(fontSize: 19)),
+          Flexible(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: MsText.pageTitle.copyWith(fontSize: 19),
+            ),
+          ),
           if (trailing != null) ...[const SizedBox(width: 4), trailing!],
         ],
       ),

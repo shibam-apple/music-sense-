@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../beat_sense/analysis/track_analysis.dart';
+import '../beat_sense/transition.dart';
 import '../library/models.dart';
 import 'playback_controller.dart';
 
@@ -40,21 +41,25 @@ class DemoPlayer extends PlaybackController {
   TrackAnalysis? get analysis {
     final t = track;
     if (t == null || !_beatSense) return null;
-    return _analyses.putIfAbsent(t.key, () => _grid(t.duration));
+    return _analyses.putIfAbsent(t.key, () => _grid(t));
   }
 
-  TrackAnalysis _grid(Duration d) {
-    final seconds = d.inMilliseconds / 1000;
-    final beats = [for (var t = 0.0; t < seconds; t += 0.5) t];
+  /// A steady beat grid; tempo and key vary per song so mixes differ.
+  TrackAnalysis _grid(Track track) {
+    final seed = track.title.hashCode.abs();
+    final bpm = 116.0 + seed % 12;
+    final seconds = track.duration.inMilliseconds / 1000;
+    final beat = 60 / bpm;
+    final beats = [for (var t = 0.0; t < seconds; t += beat) t];
     final downbeats = [for (var i = 0; i < beats.length; i += 4) beats[i]];
     return TrackAnalysis(
       duration: seconds,
-      bpm: 120,
+      bpm: bpm,
       beatConfidence: 1,
       beats: beats,
       downbeats: downbeats,
       phrases: [for (var i = 0; i < downbeats.length; i += 8) downbeats[i]],
-      key: const MusicalKey(9, minor: true),
+      key: MusicalKey(seed % 12, minor: seed % 3 != 0),
       keyConfidence: 1,
       loudnessDb: -14,
       energy: 0.6,
@@ -73,9 +78,30 @@ class DemoPlayer extends PlaybackController {
   }
 
   @override
-  BeatSenseStatus get beatSense => _beatSense
-      ? BeatSenseStatus(BeatSenseState.ready, next: upNext.firstOrNull)
-      : BeatSenseStatus.off;
+  TrackAnalysis? get nextAnalysis {
+    final next = upNext.firstOrNull;
+    if (next == null || !_beatSense) return null;
+    return _analyses.putIfAbsent(next.key, () => _grid(next));
+  }
+
+  /// A real plan from the planner over the demo beat grids, so the preview
+  /// shows what Beat Sense would do.
+  @override
+  BeatSenseStatus get beatSense {
+    if (!_beatSense) return BeatSenseStatus.off;
+    final from = analysis, to = nextAnalysis, next = upNext.firstOrNull;
+    if (from == null || to == null || next == null) {
+      return BeatSenseStatus(BeatSenseState.ready, next: next);
+    }
+    final plan = const TransitionPlanner().plan(from, to);
+    final at = _position.inMilliseconds / 1000;
+    final mixing = at >= plan.exitAt && at < plan.endsAt;
+    return BeatSenseStatus(
+      mixing ? BeatSenseState.mixing : BeatSenseState.ready,
+      plan: plan,
+      next: next,
+    );
+  }
 
   @override
   Future<void> playTracks(List<Track> tracks, {int start = 0}) async {

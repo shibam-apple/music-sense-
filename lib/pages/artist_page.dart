@@ -11,6 +11,8 @@ import '../widgets/panorama.dart';
 import '../widgets/tiles.dart';
 import 'album_page.dart';
 import 'music_page.dart' show SongList;
+import '../library/names.dart';
+import '../widgets/mix_card.dart';
 
 /// 6 · Artist — the current song's artist: full-bleed moving cover,
 /// actions, latest release and top songs.
@@ -104,22 +106,34 @@ class ArtistPage extends StatelessWidget {
       ),
       body: SliverMainAxisGroup(
         slivers: [
-          SliverToBoxAdapter(
-            child: SectionTitle(
-              'top songs',
-              trailing: const Icon(
-                LucideIcons.chevronRight300,
-                size: 16,
-                color: MsColors.inkSecondary,
+          // What Beat Sense is doing right now, and its next mix.
+          const SliverToBoxAdapter(child: SectionTitle('beat sense')),
+          const SliverToBoxAdapter(child: MixCard()),
+          const SliverToBoxAdapter(child: SizedBox(height: 26)),
+          if (library.youtube != null &&
+              artist.isNotEmpty &&
+              artist != unknownArtist)
+            SliverToBoxAdapter(
+              child: _YouTubeArtist(key: ValueKey(artist), artist: artist),
+            ),
+          if (ranked.isNotEmpty)
+            SliverToBoxAdapter(
+              child: SectionTitle(
+                'top songs',
+                trailing: const Icon(
+                  LucideIcons.chevronRight300,
+                  size: 16,
+                  color: MsColors.inkSecondary,
+                ),
               ),
             ),
-          ),
-          SongList(
-            songs: ranked,
-            current: player.track,
-            subtitle: subtitleOfSong,
-            onTap: (t) => player.playTracks(ranked, start: ranked.indexOf(t)),
-          ),
+          if (ranked.isNotEmpty)
+            SongList(
+              songs: ranked,
+              current: player.track,
+              subtitle: subtitleOfSong,
+              onTap: (t) => player.playTracks(ranked, start: ranked.indexOf(t)),
+            ),
         ],
       ),
     );
@@ -426,6 +440,135 @@ class _ReleaseCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The artist on YouTube Music: their songs, and "Mix" to play them with
+/// Beat Sense blending one into the next.
+class _YouTubeArtist extends StatefulWidget {
+  const _YouTubeArtist({super.key, required this.artist});
+
+  final String artist;
+
+  @override
+  State<_YouTubeArtist> createState() => _YouTubeArtistState();
+}
+
+class _YouTubeArtistState extends State<_YouTubeArtist> {
+  late Future<List<Track>> _songs = _load();
+
+  Future<List<Track>> _load() =>
+      LibraryScope.read(context).youtube!.artistSongs(widget.artist);
+
+  void _mix(List<Track> songs) {
+    final player = PlayerScope.read(context);
+    player.beatSenseEnabled = true;
+    player.playTracks(songs);
+    player.message.value = 'Beat Sense is mixing ${widget.artist}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final player = PlayerScope.of(context);
+    return FutureBuilder<List<Track>>(
+      future: _songs,
+      builder: (context, snap) {
+        final songs = (snap.data ?? const <Track>[]).take(8).toList();
+        final loading = snap.connectionState != ConnectionState.done;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SectionTitle(
+              'on youtube music',
+              trailing: songs.length < 2
+                  ? null
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Semantics(
+                        button: true,
+                        label: 'Mix ${widget.artist} with Beat Sense',
+                        child: Pressable(
+                          onTap: () => _mix(songs),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: MsColors.accent,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  LucideIcons.audioWaveform300,
+                                  size: 13,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Mix',
+                                  style: MsText.tileLabel.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            if (loading)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  color: MsColors.accent,
+                  backgroundColor: MsColors.track,
+                ),
+              )
+            else if (snap.hasError)
+              Pressable(
+                onTap: () => setState(() => _songs = _load()),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    'Couldn\'t reach YouTube Music. Tap to try again.',
+                    style: MsText.rowSubtitle,
+                  ),
+                ),
+              )
+            else if (songs.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 16),
+                child: Text(
+                  'No songs found on YouTube Music.',
+                  style: MsText.rowSubtitle,
+                ),
+              ),
+            for (final (i, t) in songs.indexed) ...[
+              ColumnFocus(
+                child: Reveal(
+                  order: i,
+                  child: MediaRow(
+                    art: t.artwork,
+                    title: t.title,
+                    subtitle: t.album ?? t.byline,
+                    active: player.track == t,
+                    onTap: () => player.playTracks(songs, start: i),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            const SizedBox(height: 10),
+          ],
+        );
+      },
     );
   }
 }

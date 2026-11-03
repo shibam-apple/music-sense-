@@ -17,9 +17,9 @@ void main() {
 
   test('"Artist - Title" splits only without an artist tag', () {
     expect(splitArtist('Knox - Sneakers', null), ('Sneakers', 'Knox'));
-    expect(
-      splitArtist('Knox - Sneakers', 'BangersOnly'),
-      ('Knox - Sneakers', 'BangersOnly'),
-    );
+    expect(splitArtist('Knox - Sneakers', 'BangersOnly'), (
+      'Knox - Sneakers',
+      'BangersOnly',
+    ));
   });
 }

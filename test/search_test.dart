@@ -23,7 +23,17 @@ class _FakeYouTube extends YouTubeMusicSource {
         title: 'Get Lucky',
         artist: 'Daft Punk',
         album: 'Random Access Memories',
+        duration: Duration(minutes: 4),
         artwork: PaintedArtwork(ArtStyle.futuristic),
+      ),
+      Track(
+        id: 'a5uQMwRMHcs',
+        source: 'ytm',
+        title: 'Instant Crush',
+        artist: 'Daft Punk',
+        album: 'Random Access Memories',
+        duration: Duration(minutes: 4),
+        artwork: PaintedArtwork(ArtStyle.lake),
       ),
     ];
   }
@@ -65,6 +75,41 @@ void main() {
 
     await tester.tap(find.text('Get Lucky'));
     await settle(tester);
+    expect(player.track?.title, 'Get Lucky');
+    player.pause();
+    await settle(tester);
+  });
+
+  testWidgets('Artist page lists YouTube songs and mixes them', (tester) async {
+    tester.view.physicalSize = const Size(390, 845);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final account = YouTubeAccount();
+    final youtube = _FakeYouTube(account: account);
+    addTearDown(youtube.close);
+    final library = LibraryController([youtube]);
+    final player = DemoPlayer(library.recent);
+    addTearDown(player.dispose);
+    player.beatSenseEnabled = false;
+    await tester.pumpWidget(
+      MusicSenseApp(player: player, library: library, account: account),
+    );
+    await settle(tester);
+
+    await tester.tap(find.bySemanticsLabel('Artist'));
+    await settle(tester);
+    final scroll = find.byType(Scrollable).hitTestable().first;
+    await tester.scrollUntilVisible(
+      find.text('on youtube music'),
+      200,
+      scrollable: scroll,
+    );
+    await settle(tester);
+    expect(find.text('Get Lucky'), findsOneWidget);
+
+    await tester.tap(find.text('Mix'));
+    await settle(tester);
+    expect(player.beatSenseEnabled, isTrue);
     expect(player.track?.title, 'Get Lucky');
     player.pause();
     await settle(tester);
