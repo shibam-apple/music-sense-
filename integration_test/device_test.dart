@@ -109,7 +109,7 @@ void main() {
     dj.pause();
     dj.dispose();
 
-    // AI DJ: picks the next song itself, explains why, plays part of the
+    // Beat Sense DJ: picks the next song itself, explains why, plays part of the
     // song, then hands over on the beat.
     final set = MixEngine(sources: {'local': local}, analysis: analysis);
     set.djMode = true;

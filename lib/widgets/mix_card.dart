@@ -510,7 +510,7 @@ class _MixNow extends StatelessWidget {
   }
 }
 
-/// AI DJ on/off: plays the best part of each song and picks the next one
+/// Beat Sense DJ on/off: plays the best part of each song and picks the next one
 /// itself, blending into drops or cutting on the beat.
 class _DjSwitch extends StatelessWidget {
   const _DjSwitch();
@@ -522,14 +522,14 @@ class _DjSwitch extends StatelessWidget {
     return Semantics(
       button: true,
       toggled: on,
-      label: 'AI DJ',
+      label: 'Beat Sense DJ',
       child: Pressable(
         tilt: 0.04,
         onTap: () {
           player.djMode = !on;
           player.message.value = on
-              ? 'AI DJ off · whole songs, mixed at the end'
-              : 'AI DJ on · best parts, cut and blended on the beat';
+              ? 'Beat Sense DJ off · whole songs, mixed at the end'
+              : 'Beat Sense DJ on · best parts, blended on the beat';
         },
         child: Row(
           children: [
@@ -546,7 +546,7 @@ class _DjSwitch extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'AI DJ',
+                    'Beat Sense DJ',
                     style: MsText.tileLabel.copyWith(color: Colors.white),
                   ),
                   Text(
