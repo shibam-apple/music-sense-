@@ -19,6 +19,11 @@ enum TransitionStyle {
   /// No reliable beat in one of the songs (ambient, classical, speech):
   /// a plain timed crossfade.
   crossfade,
+
+  /// The DJ's cut: the outgoing song plays to a phrase downbeat and the
+  /// incoming song's drop hits on that beat. The incoming deck rolls
+  /// silently (tempo-matched) beforehand so the cut is in time.
+  dropCut,
 }
 
 enum MixLength { short, medium, long }
@@ -73,7 +78,9 @@ class TransitionPlan {
   );
 
   bool get beatMatched =>
-      style == TransitionStyle.bassSwap || style == TransitionStyle.blend;
+      style == TransitionStyle.bassSwap ||
+      style == TransitionStyle.blend ||
+      style == TransitionStyle.dropCut;
 
   /// Volumes (0–1) and bass gains (dB, 0 = untouched) at [progress] 0–1
   /// through the blend. Volumes are equal-power so the sum stays level.
@@ -94,6 +101,18 @@ class TransitionPlan {
         return MixLevels(
           outgoing: math.cos(x * math.pi / 2),
           incoming: math.sin(x * math.pi / 2),
+        );
+      case TransitionStyle.dropCut:
+        // Silent pre-roll, then a hard swap on the downbeat with a few
+        // milliseconds of overlap (bass held back) so it doesn't click.
+        if (x < 0.85) return const MixLevels(outgoing: 1, incoming: 0);
+        if (x >= 1) return const MixLevels(outgoing: 0, incoming: 1);
+        final t = (x - 0.85) / 0.15;
+        return MixLevels(
+          outgoing: math.cos(t * math.pi / 2),
+          incoming: math.sin(t * math.pi / 2),
+          outgoingBassDb: MixLevels.bassCut,
+          incomingBassDb: MixLevels.bassCut,
         );
       case TransitionStyle.cutOnBeat:
         // Outgoing fades across the bar; incoming enters at the end of it.
@@ -200,6 +219,14 @@ class TransitionPlanner {
     double after, {
     int? beats,
   }) {
+    if (plan.style == TransitionStyle.dropCut) {
+      // The cut itself must land on a downbeat; the pre-roll precedes it.
+      final cut = from.downbeats.firstWhere(
+        (d) => d >= after + plan.length,
+        orElse: () => after + plan.length,
+      );
+      return plan.copyWith(exitAt: cut - plan.length);
+    }
     final exit = from.downbeats.firstWhere(
       (d) => d >= after,
       orElse: () => after,

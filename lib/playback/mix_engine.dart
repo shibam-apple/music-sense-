@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart' show ProcessingState;
 
 import '../beat_sense/analysis/track_analysis.dart';
+import '../beat_sense/dj.dart';
 import '../beat_sense/next_track.dart';
 import '../beat_sense/transition.dart';
 import '../library/models.dart';
@@ -47,6 +48,15 @@ class MixEngine extends PlaybackController {
   final AnalysisService _analysis;
   final TransitionPlanner _planner;
   final NextTrackScorer _scorer;
+  late final _dj = DjPlanner(planner: _planner);
+
+  bool _djMode = false;
+
+  /// Transitions so far in this DJ set (for variety and the energy arc).
+  int _setIndex = 0;
+
+  /// Where the current song started playing (a DJ mix enters mid-song).
+  double _playedFrom = 0;
 
   final _decks = [Deck(), Deck()];
   final _subscriptions = <StreamSubscription<Object?>>[];
@@ -117,6 +127,26 @@ class MixEngine extends PlaybackController {
   }
 
   @override
+  bool get djMode => _djMode;
+
+  @override
+  set djMode(bool value) {
+    if (_djMode == value) return;
+    _djMode = value;
+    _setIndex = 0;
+    if (value) _beatSense = true;
+    // Re-plan the next transition the new way.
+    if (!_mixing) {
+      _cancelPlan();
+      if (track != null) {
+        _status = const BeatSenseStatus(BeatSenseState.analysing);
+        unawaited(_prepareNext());
+      }
+    }
+    notifyListeners();
+  }
+
+  @override
   Future<void> playTracks(List<Track> tracks, {int start = 0}) async {
     if (tracks.isEmpty) return;
     _queue = List.of(tracks);
@@ -126,6 +156,7 @@ class MixEngine extends PlaybackController {
 
   Future<void> _startCurrent({double at = 0}) async {
     final generation = ++_generation;
+    _playedFrom = at;
     _cancelPlan();
     await _incoming.pause();
     final current = track!;
@@ -184,7 +215,11 @@ class MixEngine extends PlaybackController {
       return;
     }
 
-    if (_index + 1 >= _queue.length) await _extendQueue(current);
+    if (_djMode) {
+      await _djPickNext(current, generation);
+    } else if (_index + 1 >= _queue.length) {
+      await _extendQueue(current);
+    }
     if (_index + 1 >= _queue.length || generation != _generation) return;
 
     final next = _queue[_index + 1];
@@ -196,7 +231,20 @@ class MixEngine extends PlaybackController {
       return;
     }
 
-    var plan = _planner.plan(current, nextAnalysis);
+    String? why;
+    TransitionPlan plan;
+    if (_djMode) {
+      final move = _dj.plan(
+        current,
+        nextAnalysis,
+        playedFrom: _playedFrom,
+        setIndex: _setIndex,
+      );
+      plan = move.plan;
+      why = '${DjPlanner.whyPicked(current, nextAnalysis)}. ${move.why}.';
+    } else {
+      plan = _planner.plan(current, nextAnalysis);
+    }
     // Already past the planned mix point (a seek): mix a little later.
     final now = _active.seconds;
     if (now > plan.exitAt - 1) plan = _planner.retime(plan, current, now + 2);
@@ -219,8 +267,59 @@ class MixEngine extends PlaybackController {
 
     _plan = plan;
     _prepared = true;
-    _status = BeatSenseStatus(BeatSenseState.ready, plan: plan, next: next);
+    _status = BeatSenseStatus(
+      BeatSenseState.ready,
+      plan: plan,
+      next: next,
+      why: why,
+    );
     notifyListeners();
+  }
+
+  /// DJ mode: looks at the next few queued songs and the current song's
+  /// radio, analyses a handful, and moves the one that flows best to the
+  /// front of the queue.
+  Future<void> _djPickNext(TrackAnalysis current, int generation) async {
+    final seed = track!;
+    final played = {for (final t in _queue.take(_index + 1)) t.key};
+    final pool = <Track>[..._queue.skip(_index + 1).take(3)];
+    final source = _sources[seed.source];
+    if (source != null) {
+      try {
+        pool.addAll(await source.related(seed));
+      } catch (_) {
+        // Radio unavailable: pick from the queue alone.
+      }
+    }
+    final seen = <String>{};
+    final fresh = [
+      for (final t in pool)
+        if (!played.contains(t.key) && seen.add(t.key)) t,
+    ];
+    final candidates = <Candidate<Track>>[];
+    for (final t in fresh.take(6)) {
+      final a = await _analysis.analyse(t);
+      if (a != null) {
+        candidates.add(Candidate(item: t, analysis: a, artist: t.artist));
+      }
+      if (candidates.length >= 4) break;
+    }
+    final recent = _queue.reversed.take(4).map((t) => t.artist).toSet();
+    final best = _dj.pick(
+      current,
+      seed.artist,
+      candidates,
+      setIndex: _setIndex,
+      recentArtists: recent,
+    );
+    // The listener skipped while we were choosing: this pick is stale.
+    if (best == null || generation != _generation) return;
+    final pick = best.candidate.item;
+    _queue = [
+      ..._queue.take(_index + 1),
+      pick,
+      ..._queue.skip(_index + 1).where((t) => t != pick),
+    ];
   }
 
   /// At the end of the queue, Beat Sense keeps going: it asks the song's
@@ -332,6 +431,8 @@ class MixEngine extends PlaybackController {
     _activeIndex = 1 - _activeIndex;
     _index++;
     _mixing = false;
+    _playedFrom = plan.entryAt + plan.length * plan.incomingRate;
+    if (_djMode) _setIndex++;
     _incomingStarted = false;
     _prepared = false;
     _plan = null;

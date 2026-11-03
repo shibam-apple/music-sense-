@@ -108,6 +108,31 @@ void main() {
     expect(dj.track!.title, 'Beat Test 124');
     dj.pause();
     dj.dispose();
+
+    // AI DJ: picks the next song itself, explains why, plays part of the
+    // song, then hands over on the beat.
+    final set = MixEngine(sources: {'local': local}, analysis: analysis);
+    set.djMode = true;
+    await set.playTracks(songs);
+    await waitFor(
+      () => set.canMixNow,
+      const Duration(seconds: 30),
+      'the DJ to line up a song',
+    );
+    final move = set.beatSense;
+    debugPrint('DJ: ${move.plan} — ${move.why}');
+    expect(move.why, isNotNull);
+    expect(move.next!.title, 'Beat Test 124');
+    expect(move.plan!.endsAt, lessThan(set.duration.inMilliseconds / 1000));
+    set.mixNow();
+    await waitFor(
+      () => set.index == 1,
+      const Duration(seconds: 30),
+      'the DJ transition',
+    );
+    expect(set.track!.title, 'Beat Test 124');
+    set.pause();
+    set.dispose();
   });
 
   testWidgets('app shows the real library on every page', (tester) async {

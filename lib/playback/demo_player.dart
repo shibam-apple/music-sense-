@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../beat_sense/analysis/track_analysis.dart';
+import '../beat_sense/dj.dart';
 import '../beat_sense/transition.dart';
 import '../library/models.dart';
 import 'playback_controller.dart';
@@ -77,6 +78,18 @@ class DemoPlayer extends PlaybackController {
     notifyListeners();
   }
 
+  bool _dj = false;
+
+  @override
+  bool get djMode => _dj;
+
+  @override
+  set djMode(bool value) {
+    _dj = value;
+    if (value) _beatSense = true;
+    notifyListeners();
+  }
+
   @override
   TrackAnalysis? get nextAnalysis {
     final next = upNext.firstOrNull;
@@ -93,13 +106,22 @@ class DemoPlayer extends PlaybackController {
     if (from == null || to == null || next == null) {
       return BeatSenseStatus(BeatSenseState.ready, next: next);
     }
-    final plan = const TransitionPlanner().plan(from, to);
+    String? why;
+    TransitionPlan plan;
+    if (_dj) {
+      final move = const DjPlanner().plan(from, to);
+      plan = move.plan;
+      why = '${DjPlanner.whyPicked(from, to)}. ${move.why}.';
+    } else {
+      plan = const TransitionPlanner().plan(from, to);
+    }
     final at = _position.inMilliseconds / 1000;
     final mixing = at >= plan.exitAt && at < plan.endsAt;
     return BeatSenseStatus(
       mixing ? BeatSenseState.mixing : BeatSenseState.ready,
       plan: plan,
       next: next,
+      why: why,
     );
   }
 

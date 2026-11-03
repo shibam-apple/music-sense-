@@ -80,7 +80,7 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('Artist page lists YouTube songs and mixes them', (tester) async {
+  testWidgets('Artist page lists YouTube songs and starts a DJ set', (tester) async {
     tester.view.physicalSize = const Size(390, 845);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -107,9 +107,10 @@ void main() {
     await settle(tester);
     expect(find.text('Get Lucky'), findsOneWidget);
 
-    await tester.tap(find.text('Mix'));
+    await tester.tap(find.text('DJ'));
     await settle(tester);
     expect(player.beatSenseEnabled, isTrue);
+    expect(player.djMode, isTrue);
     expect(player.track?.title, 'Get Lucky');
     player.pause();
     await settle(tester);

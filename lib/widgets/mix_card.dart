@@ -20,6 +20,7 @@ class MixCard extends StatelessWidget {
     TransitionStyle.blend => 'Blend',
     TransitionStyle.cutOnBeat => 'Cut on the beat',
     TransitionStyle.crossfade => 'Crossfade',
+    TransitionStyle.dropCut => 'Cut to the drop',
   };
 
   static String styleHow(TransitionStyle s) => switch (s) {
@@ -33,6 +34,9 @@ class MixCard extends StatelessWidget {
           'downbeat.',
     TransitionStyle.crossfade =>
       'No steady beat to lock to, so it fades smoothly.',
+    TransitionStyle.dropCut =>
+      'The song plays to the end of a phrase, and the next one\'s drop '
+          'hits right on that beat.',
   };
 
   @override
@@ -51,36 +55,55 @@ class MixCard extends StatelessWidget {
         duration: MsMotion.medium,
         curve: MsMotion.emphasized,
         alignment: Alignment.topCenter,
-        child: switch (status.state) {
-          BeatSenseState.off => _Off(
-            onTurnOn: () {
-              player.beatSenseEnabled = true;
-            },
-          ),
-          BeatSenseState.unavailable => const _Note(
-            icon: LucideIcons.circleAlert300,
-            text:
-                'Beat Sense can\'t read this song\'s beat, so songs will '
-                'play one after another.',
-          ),
-          BeatSenseState.analysing => _Note(
-            icon: LucideIcons.audioWaveform300,
-            text:
-                'Listening to "${current?.title ?? ''}": finding its beats, '
-                'bars and key…',
-            busy: true,
-          ),
-          BeatSenseState.ready || BeatSenseState.mixing => _Plan(
-            current: current,
-            next: status.next,
-            from: player.analysis,
-            to: player.nextAnalysis,
-            plan: status.plan,
-            mixing: status.state == BeatSenseState.mixing,
-          ),
-        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (status.state != BeatSenseState.off) ...[
+              const _DjSwitch(),
+              const SizedBox(height: 14),
+            ],
+            _body(context, player, status, current),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _body(
+    BuildContext context,
+    PlaybackController player,
+    BeatSenseStatus status,
+    Track? current,
+  ) {
+    return switch (status.state) {
+      BeatSenseState.off => _Off(
+        onTurnOn: () {
+          player.beatSenseEnabled = true;
+        },
+      ),
+      BeatSenseState.unavailable => const _Note(
+        icon: LucideIcons.circleAlert300,
+        text:
+            'Beat Sense can\'t read this song\'s beat, so songs will '
+            'play one after another.',
+      ),
+      BeatSenseState.analysing => _Note(
+        icon: LucideIcons.audioWaveform300,
+        text:
+            'Listening to "${current?.title ?? ''}": finding its beats, '
+            'bars and key…',
+        busy: true,
+      ),
+      BeatSenseState.ready || BeatSenseState.mixing => _Plan(
+        current: current,
+        next: status.next,
+        from: player.analysis,
+        to: player.nextAnalysis,
+        plan: status.plan,
+        mixing: status.state == BeatSenseState.mixing,
+        why: status.why,
+      ),
+    };
   }
 }
 
@@ -160,6 +183,7 @@ class _Plan extends StatelessWidget {
     required this.to,
     required this.plan,
     required this.mixing,
+    this.why,
   });
 
   final Track? current;
@@ -168,6 +192,9 @@ class _Plan extends StatelessWidget {
   final TrackAnalysis? to;
   final TransitionPlan? plan;
   final bool mixing;
+
+  /// The DJ's reasoning, in DJ mode.
+  final String? why;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +283,7 @@ class _Plan extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            MixCard.styleHow(plan.style),
+            why ?? MixCard.styleHow(plan.style),
             style: MsText.rowSubtitle.copyWith(
               color: dim,
               fontSize: 11.5,
@@ -371,7 +398,7 @@ class _BlendPainter extends CustomPainter {
     final w = size.width, h = size.height;
     // Bass swap and cut hand over sharply in the middle; blends are smooth.
     double incoming(double x) => switch (style) {
-      TransitionStyle.cutOnBeat => x < 0.5 ? 0 : 1,
+      TransitionStyle.cutOnBeat || TransitionStyle.dropCut => x < 0.9 ? 0 : 1,
       TransitionStyle.bassSwap => x < 0.5 ? x * 1.2 : 0.6 + (x - 0.5) * 0.8,
       _ => x,
     };
@@ -479,6 +506,90 @@ class _MixNow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// AI DJ on/off: plays the best part of each song and picks the next one
+/// itself, blending into drops or cutting on the beat.
+class _DjSwitch extends StatelessWidget {
+  const _DjSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    final player = PlayerScope.of(context);
+    final on = player.djMode;
+    return Semantics(
+      button: true,
+      toggled: on,
+      label: 'AI DJ',
+      child: Pressable(
+        tilt: 0.04,
+        onTap: () {
+          player.djMode = !on;
+          player.message.value = on
+              ? 'AI DJ off · whole songs, mixed at the end'
+              : 'AI DJ on · best parts, cut and blended on the beat';
+        },
+        child: Row(
+          children: [
+            Icon(
+              LucideIcons.disc3300,
+              size: 18,
+              color: on
+                  ? MsColors.accentSoft
+                  : Colors.white.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AI DJ',
+                    style: MsText.tileLabel.copyWith(color: Colors.white),
+                  ),
+                  Text(
+                    on
+                        ? 'Picks songs, cuts and blends on the beat'
+                        : 'Off: whole songs, mixed at the end',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: MsText.rowSubtitle.copyWith(
+                      color: Colors.white.withValues(alpha: 0.55),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            // A small switch in the card's own style.
+            AnimatedContainer(
+              duration: MsMotion.fast,
+              curve: MsMotion.curve,
+              width: 40,
+              height: 24,
+              padding: const EdgeInsets.all(3),
+              alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+              decoration: BoxDecoration(
+                color: on
+                    ? MsColors.accent
+                    : Colors.white.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -464,8 +464,9 @@ class _YouTubeArtistState extends State<_YouTubeArtist> {
   void _mix(List<Track> songs) {
     final player = PlayerScope.read(context);
     player.beatSenseEnabled = true;
+    player.djMode = true;
     player.playTracks(songs);
-    player.message.value = 'Beat Sense is mixing ${widget.artist}';
+    player.message.value = 'AI DJ set, starting with ${widget.artist}';
   }
 
   @override
@@ -487,7 +488,7 @@ class _YouTubeArtistState extends State<_YouTubeArtist> {
                       padding: const EdgeInsets.only(left: 6),
                       child: Semantics(
                         button: true,
-                        label: 'Mix ${widget.artist} with Beat Sense',
+                        label: 'Start an AI DJ set with ${widget.artist}',
                         child: Pressable(
                           onTap: () => _mix(songs),
                           child: Container(
@@ -509,7 +510,7 @@ class _YouTubeArtistState extends State<_YouTubeArtist> {
                                 ),
                                 const SizedBox(width: 5),
                                 Text(
-                                  'Mix',
+                                  'DJ',
                                   style: MsText.tileLabel.copyWith(
                                     color: Colors.white,
                                     fontSize: 12,

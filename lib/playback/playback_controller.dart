@@ -22,13 +22,16 @@ enum BeatSenseState {
 }
 
 class BeatSenseStatus {
-  const BeatSenseStatus(this.state, {this.plan, this.next});
+  const BeatSenseStatus(this.state, {this.plan, this.next, this.why});
 
   static const off = BeatSenseStatus(BeatSenseState.off);
 
   final BeatSenseState state;
   final TransitionPlan? plan;
   final Track? next;
+
+  /// In DJ mode: why this song was picked and why this transition.
+  final String? why;
 
   /// One short line for the Now Playing label.
   String get label => switch (state) {
@@ -72,6 +75,11 @@ abstract class PlaybackController extends ChangeNotifier {
 
   /// Analysis of the song Beat Sense will mix in next, once known.
   TrackAnalysis? get nextAnalysis => null;
+
+  /// DJ mode: Beat Sense plays the best part of each song and picks the
+  /// next one itself, blending into drops or cutting on the beat.
+  bool get djMode => false;
+  set djMode(bool value) {}
 
   /// Whether the next song is lined up so a mix can start right away.
   bool get canMixNow => false;

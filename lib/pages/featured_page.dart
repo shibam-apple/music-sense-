@@ -66,15 +66,22 @@ class FeaturedPage extends StatelessWidget {
               ),
             ]),
             TileColumn([
-              // Radio: Beat Sense keeps picking and mixing related songs.
+              // AI DJ: Beat Sense picks related songs and mixes them like
+              // a DJ set, from the featured song.
               MetroTile(
                 tone: TileTone.accent,
-                icon: LucideIcons.radio300,
-                label: 'Radio',
-                caption: player.beatSenseEnabled
-                    ? 'Live now'
-                    : 'Beat Sense off',
-                onTap: featured == null ? null : () => play([featured]),
+                icon: LucideIcons.disc3300,
+                label: 'AI DJ',
+                caption: player.djMode ? 'Live now' : 'Start a set',
+                onTap: featured == null
+                    ? null
+                    : () {
+                        player.beatSenseEnabled = true;
+                        player.djMode = true;
+                        play([featured]);
+                        player.message.value =
+                            'AI DJ set, starting with ${featured.title}';
+                      },
               ),
               MetroTile(
                 art: art(chill, ArtStyle.lake),
