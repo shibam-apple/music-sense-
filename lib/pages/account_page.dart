@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../library/library.dart';
+import '../playback/engine_choice.dart';
 import '../playback/playback_controller.dart';
 import '../sources/youtube_music/account.dart';
 import '../theme/tokens.dart';
@@ -36,6 +37,27 @@ class AccountPage extends StatelessWidget {
       label: 'Beat Sense',
       caption: player.beatSenseEnabled ? 'On' : 'Off',
       onTap: () => player.beatSenseEnabled = !player.beatSenseEnabled,
+    );
+
+    // Which audio engine Beat Sense runs on; switching takes a restart.
+    final engine = EngineScope.of(context);
+    final engineTile = MetroTile(
+      tone: TileTone.dark,
+      icon: LucideIcons.audioLines300,
+      label: engine == EngineChoice.studio
+          ? 'Beat Sense engine: Studio'
+          : 'Beat Sense engine: Classic',
+      caption: engine == EngineChoice.studio
+          ? 'Beat lock, DJ EQ, key matching. Tap for Classic'
+          : 'Standard players. Tap for Studio',
+      onTap: () async {
+        await EngineChoice.save(
+          engine == EngineChoice.studio
+              ? EngineChoice.classic
+              : EngineChoice.studio,
+        );
+        player.message.value = 'Close and reopen Music Sense to switch engines';
+      },
     );
 
     final check = MetroTile(
@@ -83,6 +105,9 @@ class AccountPage extends StatelessWidget {
               TileRow([
                 TileColumn(span: 3, [check]),
               ]),
+            TileRow([
+              TileColumn(span: 3, [engineTile]),
+            ]),
           ] else ...[
             TileRow(height: 1.5, [
               TileColumn(span: 3, [
@@ -108,6 +133,9 @@ class AccountPage extends StatelessWidget {
               TileRow([
                 TileColumn(span: 3, [check]),
               ]),
+            TileRow([
+              TileColumn(span: 3, [engineTile]),
+            ]),
           ],
         ],
       ),

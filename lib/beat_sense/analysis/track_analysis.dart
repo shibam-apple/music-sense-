@@ -121,6 +121,10 @@ class MusicalKey {
 
   String get camelot => '$camelotNumber${minor ? 'A' : 'B'}';
 
+  /// The key [semitones] up (or down, if negative).
+  MusicalKey transpose(int semitones) =>
+      MusicalKey((tonic + semitones) % 12, minor: minor);
+
   /// Harmonic distance on the Camelot wheel: 0 same key, 1 a neighbour
   /// (perfect mix), 2 a further step, and so on.
   int camelotDistance(MusicalKey other) {

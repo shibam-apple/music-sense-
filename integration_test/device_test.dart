@@ -4,6 +4,7 @@ import 'package:integration_test/integration_test.dart';
 import 'package:music_sense/main.dart' as app;
 import 'package:music_sense/playback/analysis_service.dart';
 import 'package:music_sense/playback/mix_engine.dart';
+import 'package:music_sense/playback/native_mix_engine.dart';
 import 'package:music_sense/playback/playback_controller.dart';
 import 'package:music_sense/sources/local_source.dart';
 
@@ -133,6 +134,43 @@ void main() {
     expect(set.track!.title, 'Beat Test 124');
     set.pause();
     set.dispose();
+
+    // The native Beat Sense engine: one mixer, beat lock, DJ EQ moves.
+    final studio = await NativeMixEngine.create(
+      sources: {'local': local},
+      analysis: analysis,
+    );
+    expect(studio, isNotNull, reason: 'native engine available');
+    await studio!.playTracks(songs);
+    await waitFor(
+      () => studio.canMixNow,
+      const Duration(seconds: 30),
+      'the native engine to line up a mix',
+    );
+    final native = studio.beatSense.plan!;
+    debugPrint('Native engine plan: $native');
+    expect(native.beatMatched, isTrue);
+    final startedAt = studio.position;
+    await Future<void>.delayed(const Duration(seconds: 2));
+    expect(studio.position, greaterThan(startedAt), reason: 'audio is playing');
+    studio.mixNow();
+    await waitFor(
+      () => studio.beatSense.state == BeatSenseState.mixing,
+      const Duration(seconds: 6),
+      'the native mix to start',
+    );
+    await waitFor(
+      () => studio.index == 1,
+      const Duration(seconds: 30),
+      'the native mix to finish',
+    );
+    expect(studio.track!.title, 'Beat Test 124');
+    expect(studio.playing, isTrue);
+    debugPrint(
+      'Native engine: mixed into ${studio.track!.title} at ${studio.position}',
+    );
+    studio.pause();
+    studio.dispose();
   });
 
   testWidgets('app shows the real library on every page', (tester) async {

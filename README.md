@@ -97,3 +97,28 @@ android/.../MediaBridge.kt   MediaStore, covers, audio decoding for analysis
 
 Fonts: [Inter](https://rsms.me/inter/) (SIL Open Font License, see
 `assets/fonts/LICENSE.txt`). Icons: [Lucide](https://lucide.dev).
+
+## Beat Sense engine
+
+On Android, songs play through Beat Sense's own audio engine (Kotlin,
+`android/app/src/main/kotlin/.../engine/`) instead of two separate players:
+
+- **One mixer, one clock.** Both songs render in the same audio callback;
+  during a transition the incoming song's position is computed from the
+  outgoing one's (`incoming = entry + (outgoing − exit) × rate`), so beats
+  stay locked to well under a millisecond with no drift to correct.
+- **Tempo and key** by WSOLA on resampled grains: tempo changes keep the
+  pitch, key shifts keep the tempo, and normal speed is bit-exact.
+- **DJ EQ and filter:** a Linkwitz-Riley 3-band isolator (kills at 24 dB/oct)
+  and a sweepable high/low-pass per deck, plus a limiter on the sum.
+- **Transition scripts** from the Dart planner (`lib/beat_sense/mix_script.dart`):
+  timed lanes for each deck's volume, low/mid/high and filter — e.g. the
+  new song enters with its bass killed and highs down, the bass changes
+  hands on the middle downbeat, the old song is filtered out.
+- **Key matching:** the incoming song can be shifted a semitone so the two
+  keys sit next to each other on the Camelot wheel.
+
+`tool/engine_check.sh` runs the engine's checks on the JVM (pass-through,
+EQ flatness and kills, filter, tempo/pitch accuracy, beat lock, limiter).
+Account → *Beat Sense engine* switches back to the classic players.
+

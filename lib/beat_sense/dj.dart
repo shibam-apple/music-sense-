@@ -56,8 +56,9 @@ class DjPlanner {
     TrackAnalysis to, {
     double playedFrom = 0,
     int setIndex = 0,
+    int fromSemitones = 0,
   }) {
-    final base = planner.plan(from, to);
+    final base = planner.plan(from, to, fromSemitones: fromSemitones);
     final exit = _exit(from, playedFrom, base);
     final drop = dropOf(to);
 
@@ -65,7 +66,10 @@ class DjPlanner {
       return DjMove(base.copyWith(exitAt: exit), 'no steady beat, so a fade');
     }
 
-    final keyStep = from.key.camelotDistance(to.key);
+    // Keys as they'll actually sound, after any shift.
+    final keyStep = from.key
+        .transpose(fromSemitones)
+        .camelotDistance(to.key.transpose(base.incomingSemitones));
     final keysTrusted = math.min(from.keyConfidence, to.keyConfidence) > 0.15;
     final energyJump = to.energy - from.energy;
     final matchable = base.beatMatched;
@@ -86,7 +90,10 @@ class DjPlanner {
       why = 'a cut for variety';
     } else {
       cut = false;
-      why = base.style == TransitionStyle.blend
+      why = base.incomingSemitones != 0
+          ? 'shifted ${base.incomingSemitones > 0 ? 'up' : 'down'} a semitone '
+                'so the keys match, then blended into the drop'
+          : base.style == TransitionStyle.blend
           ? 'keys and energy match, so a long blend into the drop'
           : 'beats locked, bass handed over on a downbeat';
     }
@@ -138,6 +145,7 @@ class DjPlanner {
       rampBack: base.rampBack,
       incomingGainDb: base.incomingGainDb,
       outgoingGainDb: base.outgoingGainDb,
+      incomingSemitones: base.incomingSemitones,
     );
   }
 
@@ -165,6 +173,7 @@ class DjPlanner {
       rampBack: base.beatMatched ? 8 * 4 * from.beatLength : 0,
       incomingGainDb: base.incomingGainDb,
       outgoingGainDb: base.outgoingGainDb,
+      incomingSemitones: base.incomingSemitones,
     );
   }
 

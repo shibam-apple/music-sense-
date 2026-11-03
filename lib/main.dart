@@ -12,7 +12,9 @@ import 'sources/youtube_music/account.dart';
 import 'playback/analysis_service.dart';
 import 'playback/audio_handler.dart';
 import 'playback/demo_player.dart';
+import 'playback/engine_choice.dart';
 import 'playback/mix_engine.dart';
+import 'playback/native_mix_engine.dart';
 import 'playback/playback_controller.dart';
 import 'shell.dart';
 import 'sources/local_source.dart';
@@ -37,11 +39,16 @@ Future<void> main() async {
   final library = LibraryController(sources, analysisOf: analysis.cached);
 
   final PlaybackController player;
+  var engine = EngineChoice.classic;
   if (device) {
-    player = MixEngine(
-      sources: {for (final s in sources) s.id: s},
-      analysis: analysis,
-    );
+    final bySource = {for (final s in sources) s.id: s};
+    // The native Beat Sense engine, unless switched off or unavailable.
+    final chosen = await EngineChoice.load();
+    final studio = chosen == EngineChoice.studio
+        ? await NativeMixEngine.create(sources: bySource, analysis: analysis)
+        : null;
+    engine = studio != null ? EngineChoice.studio : EngineChoice.classic;
+    player = studio ?? MixEngine(sources: bySource, analysis: analysis);
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
     await AudioService.init(
@@ -58,7 +65,14 @@ Future<void> main() async {
   }
   await library.stats.attach(player);
 
-  runApp(MusicSenseApp(player: player, library: library, account: account));
+  runApp(
+    MusicSenseApp(
+      player: player,
+      library: library,
+      account: account,
+      engine: engine,
+    ),
+  );
   if (device) {
     unawaited(youtube?.refreshProfile());
     await library.load();
@@ -71,43 +85,50 @@ class MusicSenseApp extends StatelessWidget {
     required this.player,
     required this.library,
     required this.account,
+    this.engine = EngineChoice.classic,
   });
 
   final PlaybackController player;
   final LibraryController library;
   final YouTubeAccount account;
 
+  /// Which playback engine is running (shown on the Account page).
+  final EngineChoice engine;
+
   @override
   Widget build(BuildContext context) {
-    return AccountScope(
-      account: account,
-      child: PlayerScope(
-        player: player,
-        child: LibraryScope(
-          library: library,
-          child: NowPlayingAccent(
-            child: BeatClock(
-              child: MaterialApp(
-                title: 'Music Sense',
-                debugShowCheckedModeBanner: false,
-                theme: ThemeData(
-                  fontFamily: MsText.family,
-                  scaffoldBackgroundColor: MsColors.background,
-                  splashFactory: NoSplash.splashFactory,
-                  colorScheme: ColorScheme.fromSeed(
-                    seedColor: MsColors.accent,
-                    primary: MsColors.accent,
-                    surface: MsColors.background,
+    return EngineScope(
+      engine: engine,
+      child: AccountScope(
+        account: account,
+        child: PlayerScope(
+          player: player,
+          child: LibraryScope(
+            library: library,
+            child: NowPlayingAccent(
+              child: BeatClock(
+                child: MaterialApp(
+                  title: 'Music Sense',
+                  debugShowCheckedModeBanner: false,
+                  theme: ThemeData(
+                    fontFamily: MsText.family,
+                    scaffoldBackgroundColor: MsColors.background,
+                    splashFactory: NoSplash.splashFactory,
+                    colorScheme: ColorScheme.fromSeed(
+                      seedColor: MsColors.accent,
+                      primary: MsColors.accent,
+                      surface: MsColors.background,
+                    ),
                   ),
-                ),
-                home: const AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: SystemUiOverlayStyle(
-                    statusBarColor: Color(0x00000000),
-                    statusBarIconBrightness: Brightness.dark,
-                    systemNavigationBarColor: Color(0x00000000),
-                    systemNavigationBarIconBrightness: Brightness.dark,
+                  home: const AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: SystemUiOverlayStyle(
+                      statusBarColor: Color(0x00000000),
+                      statusBarIconBrightness: Brightness.dark,
+                      systemNavigationBarColor: Color(0x00000000),
+                      systemNavigationBarIconBrightness: Brightness.dark,
+                    ),
+                    child: _Frame(child: PanoramaShell()),
                   ),
-                  child: _Frame(child: PanoramaShell()),
                 ),
               ),
             ),

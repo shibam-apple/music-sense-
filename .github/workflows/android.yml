@@ -31,6 +31,9 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
+      # The native audio engine's DSP (beat lock, EQ, tempo/key) on the JVM.
+      - name: Beat Sense engine checks
+        run: ./tool/engine_check.sh
 
       - name: Build release APK (with YouTube Music)
         run: flutter build apk --release

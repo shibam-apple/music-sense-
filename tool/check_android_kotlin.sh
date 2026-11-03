@@ -32,5 +32,5 @@ rm -rf out
 java -cp kotlin-compiler-embeddable.jar:kotlin-stdlib.jar:kotlin-script-runtime.jar:kotlin-reflect.jar:kotlin-daemon-embeddable.jar:trove4j.jar:annotations.jar:coroutines.jar \
   org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -jvm-target 17 \
   -classpath android-all.jar:flutter_embedding.jar:kotlin-stdlib.jar:newpipe.jar:jsr305.jar -d out \
-  "$here"/android/app/src/main/kotlin/com/musicsense/music_sense/*.kt stub/com/ryanheise/audioservice/*.kt stub/androidx/lifecycle/*.kt
+  "$here"/android/app/src/main/kotlin/com/musicsense/music_sense/*.kt "$here"/android/app/src/main/kotlin/com/musicsense/music_sense/engine/*.kt stub/com/ryanheise/audioservice/*.kt stub/androidx/lifecycle/*.kt
 echo "Kotlin OK"

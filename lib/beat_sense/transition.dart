@@ -39,9 +39,14 @@ class TransitionPlan {
     required this.rampBack,
     required this.incomingGainDb,
     required this.outgoingGainDb,
+    this.incomingSemitones = 0,
   });
 
   final TransitionStyle style;
+
+  /// Key shift for the incoming song (semitones) so the two keys mix in
+  /// harmony; kept for the rest of that song. Needs the native engine.
+  final int incomingSemitones;
 
   /// Position in the outgoing song (seconds) where the incoming song
   /// starts. A downbeat (usually a phrase start) for beat-matched styles.
@@ -66,15 +71,22 @@ class TransitionPlan {
 
   double get endsAt => exitAt + length;
 
-  TransitionPlan copyWith({double? exitAt, double? length}) => TransitionPlan(
-    style: style,
+  TransitionPlan copyWith({
+    TransitionStyle? style,
+    double? exitAt,
+    double? entryAt,
+    double? length,
+    int? incomingSemitones,
+  }) => TransitionPlan(
+    style: style ?? this.style,
     exitAt: exitAt ?? this.exitAt,
-    entryAt: entryAt,
+    entryAt: entryAt ?? this.entryAt,
     length: length ?? this.length,
     incomingRate: incomingRate,
     rampBack: rampBack,
     incomingGainDb: incomingGainDb,
     outgoingGainDb: outgoingGainDb,
+    incomingSemitones: incomingSemitones ?? this.incomingSemitones,
   );
 
   bool get beatMatched =>
@@ -127,7 +139,8 @@ class TransitionPlan {
   String toString() =>
       'TransitionPlan(${style.name}, exit ${exitAt.toStringAsFixed(2)}s, '
       'entry ${entryAt.toStringAsFixed(2)}s, ${length.toStringAsFixed(2)}s, '
-      'rate ${incomingRate.toStringAsFixed(3)})';
+      'rate ${incomingRate.toStringAsFixed(3)}'
+      '${incomingSemitones == 0 ? '' : ', key ${incomingSemitones > 0 ? '+' : ''}$incomingSemitones'})';
 }
 
 class MixLevels {
@@ -149,7 +162,28 @@ class TransitionPlanner {
     this.length = MixLength.medium,
     this.maxRateChange = 0.08,
     this.targetLoudnessDb = -14,
+    this.keyShift = false,
   });
+
+  /// May shift the incoming song's key by a semitone to match (the native
+  /// engine can; the plain players can't).
+  final bool keyShift;
+
+  /// The semitone shift (-1, 0 or +1) that puts [to] closest to [from] on
+  /// the Camelot wheel; 0 unless it actually helps.
+  static int keyMatch(MusicalKey from, MusicalKey to) {
+    var best = 0;
+    var bestDistance = from.camelotDistance(to);
+    if (bestDistance <= 1) return 0;
+    for (final s in const [1, -1]) {
+      final d = from.camelotDistance(to.transpose(s));
+      if (d < bestDistance) {
+        best = s;
+        bestDistance = d;
+      }
+    }
+    return bestDistance <= 1 ? best : 0;
+  }
 
   final MixLength length;
 
@@ -160,8 +194,17 @@ class TransitionPlanner {
 
   static const minBeatConfidence = 0.35;
 
-  TransitionPlan plan(TrackAnalysis from, TrackAnalysis to) {
+  /// [fromSemitones] is the key shift the outgoing song is playing with.
+  TransitionPlan plan(
+    TrackAnalysis from,
+    TrackAnalysis to, {
+    int fromSemitones = 0,
+  }) {
     final gains = (out: gainFor(from), inc: gainFor(to));
+    final fromKey = from.key.transpose(fromSemitones);
+    final trusted = math.min(from.keyConfidence, to.keyConfidence) > 0.15;
+    final shift = keyShift && trusted ? keyMatch(fromKey, to.key) : 0;
+    final toKey = to.key.transpose(shift);
 
     if (from.beatConfidence < minBeatConfidence ||
         to.beatConfidence < minBeatConfidence ||
@@ -175,13 +218,11 @@ class TransitionPlanner {
       return _cut(from, to, gains.out, gains.inc);
     }
 
-    final beats = _beats(from, to);
+    final beats = _beats(fromKey, toKey);
     final blendLength = beats * from.beatLength;
     final exit = _exitPoint(from, blendLength);
     final entry = _entryPoint(to, beats * to.beatLength);
-    final keyClose =
-        from.key.camelotDistance(to.key) <= 1 &&
-        math.min(from.keyConfidence, to.keyConfidence) > 0.15;
+    final keyClose = fromKey.camelotDistance(toKey) <= 1 && trusted;
     final style = keyClose && (from.energy - to.energy).abs() < 0.2
         ? TransitionStyle.blend
         : TransitionStyle.bassSwap;
@@ -195,6 +236,7 @@ class TransitionPlanner {
       rampBack: 8 * 4 * from.beatLength,
       incomingGainDb: gains.inc,
       outgoingGainDb: gains.out,
+      incomingSemitones: shift,
     );
   }
 
@@ -245,7 +287,7 @@ class TransitionPlanner {
     return plan.copyWith(exitAt: exit, length: math.max(0.5, length));
   }
 
-  int _beats(TrackAnalysis from, TrackAnalysis to) {
+  int _beats(MusicalKey from, MusicalKey to) {
     // DJ-length blends: 8 bars by default (about 16 s at 120 BPM).
     var beats = switch (length) {
       MixLength.short => 16,
@@ -253,7 +295,7 @@ class TransitionPlanner {
       MixLength.long => 64,
     };
     // Clashing keys: keep the overlap short.
-    if (from.key.camelotDistance(to.key) > 2 && beats > 8) beats ~/= 2;
+    if (from.camelotDistance(to) > 2 && beats > 8) beats ~/= 2;
     return beats;
   }
 

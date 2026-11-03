@@ -2,6 +2,7 @@ package com.musicsense.music_sense
 
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
+import com.musicsense.music_sense.engine.NativeEngine
 import java.util.WeakHashMap
 
 /** Hosts Flutter; extends AudioServiceActivity for background playback. */
@@ -13,6 +14,9 @@ class MainActivity : AudioServiceActivity() {
          * must outlive any one activity.
          */
         private val bridges = WeakHashMap<FlutterEngine, MediaBridge>()
+
+        /** The Beat Sense audio engine, also one per Flutter engine. */
+        private val engines = WeakHashMap<FlutterEngine, NativeEngine>()
     }
 
     private var media: MediaBridge? = null
@@ -22,6 +26,9 @@ class MainActivity : AudioServiceActivity() {
         media = bridges.getOrPut(flutterEngine) {
             MediaBridge(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
         }.also { it.activity = this }
+        engines.getOrPut(flutterEngine) {
+            NativeEngine(applicationContext, flutterEngine.dartExecutor.binaryMessenger)
+        }
     }
 
     override fun onRequestPermissionsResult(
