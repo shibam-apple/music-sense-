@@ -45,6 +45,39 @@ void main() {
   const planner = TransitionPlanner();
 
   group('TransitionPlanner', () {
+    test('blends for 8 bars when the songs suit each other', () {
+      final a = track(bpm: 124), b = track(bpm: 122);
+      final plan = planner.plan(a, b);
+      expect(plan.length, closeTo(32 * a.beatLength, 1e-9));
+    });
+
+    test('mix now moves the blend to the next downbeat', () {
+      final a = track(bpm: 124), b = track(bpm: 122);
+      final plan = planner.plan(a, b);
+      final now = 61.3;
+      final moved = planner.retime(plan, a, now);
+      expect(moved.exitAt, greaterThanOrEqualTo(now));
+      expect(a.downbeats, contains(moved.exitAt));
+      expect(moved.exitAt - now, lessThan(4 * a.beatLength + 1e-9));
+      expect(moved.length, plan.length);
+      expect(moved.entryAt, plan.entryAt);
+    });
+
+    test('a quick mix (Next) is shorter', () {
+      final a = track(bpm: 124), b = track(bpm: 122);
+      final plan = planner.plan(a, b);
+      final quick = planner.retime(plan, a, 40, beats: 8);
+      expect(quick.length, closeTo(8 * a.beatLength, 1e-9));
+    });
+
+    test('a late mix never runs past the end of the song', () {
+      final a = track(bpm: 124, duration: 200), b = track(bpm: 122);
+      final plan = planner.plan(a, b);
+      final late = planner.retime(plan, a, 195);
+      expect(late.endsAt, lessThanOrEqualTo(a.duration));
+      expect(late.length, greaterThan(0));
+    });
+
     test('beat-matches close tempos from a phrase start', () {
       final a = track(bpm: 124), b = track(bpm: 120);
       final plan = planner.plan(a, b);

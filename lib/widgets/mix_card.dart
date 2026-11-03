@@ -263,6 +263,7 @@ class _Plan extends StatelessWidget {
               height: 1.35,
             ),
           ),
+          if (!mixing) ...[const SizedBox(height: 12), _MixNow()],
         ],
       ],
     );
@@ -417,4 +418,67 @@ class _BlendPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BlendPainter old) =>
       old.progress != progress || old.style != style || old.accent != accent;
+}
+
+/// Starts the blend at the next bar, so you can hear it now.
+class _MixNow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final player = PlayerScope.of(context);
+    final ready = player.canMixNow;
+    return Row(
+      children: [
+        Semantics(
+          button: true,
+          enabled: ready,
+          label: 'Mix now',
+          child: Pressable(
+            onTap: ready ? player.mixNow : null,
+            child: AnimatedOpacity(
+              duration: MsMotion.fast,
+              opacity: ready ? 1 : 0.4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: MsColors.accent,
+                  borderRadius: BorderRadius.circular(MsSizes.tileRadius),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      LucideIcons.audioWaveform300,
+                      size: 15,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Mix now',
+                      style: MsText.tileLabel.copyWith(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            ready
+                ? 'or press Next for a quick mix'
+                : 'Lining up the next song…',
+            maxLines: 2,
+            style: MsText.rowSubtitle.copyWith(
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

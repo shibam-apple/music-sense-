@@ -73,6 +73,13 @@ abstract class PlaybackController extends ChangeNotifier {
   /// Analysis of the song Beat Sense will mix in next, once known.
   TrackAnalysis? get nextAnalysis => null;
 
+  /// Whether the next song is lined up so a mix can start right away.
+  bool get canMixNow => false;
+
+  /// Starts Beat Sense's blend into the next song at the next bar, instead
+  /// of waiting for the end of this one.
+  void mixNow() {}
+
   /// 0–1 position within the current beat, for visuals that pulse in time;
   /// null when the beat isn't known.
   double? get beatPhase {

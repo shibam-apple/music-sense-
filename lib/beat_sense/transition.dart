@@ -61,6 +61,17 @@ class TransitionPlan {
 
   double get endsAt => exitAt + length;
 
+  TransitionPlan copyWith({double? exitAt, double? length}) => TransitionPlan(
+    style: style,
+    exitAt: exitAt ?? this.exitAt,
+    entryAt: entryAt,
+    length: length ?? this.length,
+    incomingRate: incomingRate,
+    rampBack: rampBack,
+    incomingGainDb: incomingGainDb,
+    outgoingGainDb: outgoingGainDb,
+  );
+
   bool get beatMatched =>
       style == TransitionStyle.bassSwap || style == TransitionStyle.blend;
 
@@ -179,11 +190,40 @@ class TransitionPlanner {
     return best;
   }
 
+  /// Moves [plan] to start on the first downbeat at or after [after]
+  /// seconds into [from], as a DJ does when mixing early. With [beats] the
+  /// blend is shortened to that many beats (a quick mix for Next); it is
+  /// also shortened if the song would end before the blend does.
+  TransitionPlan retime(
+    TransitionPlan plan,
+    TrackAnalysis from,
+    double after, {
+    int? beats,
+  }) {
+    final exit = from.downbeats.firstWhere(
+      (d) => d >= after,
+      orElse: () => after,
+    );
+    var length = beats == null || !plan.beatMatched
+        ? plan.length
+        : math.min(plan.length, beats * from.beatLength);
+    final room = from.duration - exit - 0.5;
+    if (length > room) {
+      // Whole bars that still fit, at least one beat.
+      final bar = 4 * from.beatLength;
+      length = room >= bar
+          ? (room / bar).floor() * bar
+          : math.max(from.beatLength, room);
+    }
+    return plan.copyWith(exitAt: exit, length: math.max(0.5, length));
+  }
+
   int _beats(TrackAnalysis from, TrackAnalysis to) {
+    // DJ-length blends: 8 bars by default (about 16 s at 120 BPM).
     var beats = switch (length) {
-      MixLength.short => 8,
-      MixLength.medium => 16,
-      MixLength.long => 32,
+      MixLength.short => 16,
+      MixLength.medium => 32,
+      MixLength.long => 64,
     };
     // Clashing keys: keep the overlap short.
     if (from.key.camelotDistance(to.key) > 2 && beats > 8) beats ~/= 2;
@@ -208,7 +248,13 @@ class TransitionPlanner {
     final first = b.downbeats.first;
     final ideal = b.introEnd - blend;
     if (ideal <= first) return first;
-    return b.downbeats.lastWhere((d) => d <= ideal + 0.05, orElse: () => first);
+    // A phrase start if one fits (it's where a DJ would drop in), else a
+    // downbeat.
+    for (final candidates in [b.phrases, b.downbeats]) {
+      final fits = candidates.where((d) => d >= first && d <= ideal + 0.05);
+      if (fits.isNotEmpty) return fits.last;
+    }
+    return first;
   }
 
   TransitionPlan _cut(

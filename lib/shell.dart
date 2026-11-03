@@ -10,10 +10,12 @@ import 'pages/featured_page.dart';
 import 'pages/music_page.dart';
 import 'pages/new_page.dart';
 import 'pages/playing_page.dart';
+import 'pages/search_page.dart';
 import 'playback/playback_controller.dart';
 import 'theme/tokens.dart';
 import 'widgets/ambient.dart';
 import 'widgets/panorama.dart';
+import 'widgets/tiles.dart';
 import 'widgets/toast.dart';
 import 'widgets/xmb_bar.dart';
 
@@ -201,6 +203,12 @@ class _PanoramaShellState extends State<PanoramaShell>
                       );
                     },
                   ),
+                  // Search, from anywhere.
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top + 10,
+                    right: 14,
+                    child: const _SearchButton(),
+                  ),
                   const Positioned(
                     left: 0,
                     right: 0,
@@ -233,5 +241,41 @@ class _PanoramaShellState extends State<PanoramaShell>
   bool _visible(int i, double p, double width) {
     final left = (i - p) * MsSizes.pageStride;
     return left < width && left + width > 0;
+  }
+}
+
+class _SearchButton extends StatelessWidget {
+  const _SearchButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Search',
+      child: Pressable(
+        onTap: () => SearchPage.open(context),
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0x14000000)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(
+            LucideIcons.search300,
+            size: 20,
+            color: MsColors.ink,
+          ),
+        ),
+      ),
+    );
   }
 }

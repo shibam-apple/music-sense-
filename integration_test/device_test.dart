@@ -81,6 +81,33 @@ void main() {
     expect(engine.position.inMilliseconds / 1000, greaterThan(plan.entryAt));
     engine.pause();
     engine.dispose();
+
+    // Mix now: the blend starts at the next bar, not at the end.
+    final dj = MixEngine(sources: {'local': local}, analysis: analysis);
+    await dj.playTracks(songs);
+    await waitFor(
+      () => dj.canMixNow,
+      const Duration(seconds: 30),
+      'the next song lined up',
+    );
+    final pressedAt = dj.position.inMilliseconds / 1000;
+    dj.mixNow();
+    final early = dj.beatSense.plan!;
+    debugPrint('Mix now at ${pressedAt.toStringAsFixed(2)}s: $early');
+    expect(early.exitAt - pressedAt, lessThan(3));
+    await waitFor(
+      () => dj.beatSense.state == BeatSenseState.mixing,
+      const Duration(seconds: 6),
+      'mix now to start',
+    );
+    await waitFor(
+      () => dj.index == 1,
+      const Duration(seconds: 30),
+      'mix now to finish',
+    );
+    expect(dj.track!.title, 'Beat Test 124');
+    dj.pause();
+    dj.dispose();
   });
 
   testWidgets('app shows the real library on every page', (tester) async {

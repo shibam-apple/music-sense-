@@ -196,7 +196,10 @@ class MixEngine extends PlaybackController {
       return;
     }
 
-    final plan = _planner.plan(current, nextAnalysis);
+    var plan = _planner.plan(current, nextAnalysis);
+    // Already past the planned mix point (a seek): mix a little later.
+    final now = _active.seconds;
+    if (now > plan.exitAt - 1) plan = _planner.retime(plan, current, now + 2);
     final source = _sources[next.source]!;
     final deck = _incoming;
     try {
@@ -277,9 +280,16 @@ class MixEngine extends PlaybackController {
     // Start the incoming deck exactly on the exit downbeat.
     if (!_incomingStarted &&
         now >= plan.exitAt - _tick.inMicroseconds / 1e6 * 2) {
-      if (now > plan.exitAt + 1) {
-        // Seeked past the mix point: skip the blend for this song.
-        _cancelPlan();
+      final analysis = _active.analysis;
+      if (now > plan.exitAt + 1 && analysis != null) {
+        // Seeked past the mix point: move the blend to the next downbeat.
+        _plan = _planner.retime(plan, analysis, now + 0.5);
+        _status = BeatSenseStatus(
+          BeatSenseState.ready,
+          plan: _plan,
+          next: _incoming.track,
+        );
+        notifyListeners();
         return;
       }
       _incomingStarted = true;
@@ -316,6 +326,8 @@ class MixEngine extends PlaybackController {
   }
 
   Future<void> _finishMix(TransitionPlan plan) async {
+    // Next during a blend and the blend's own end can both get here.
+    if (!_mixing) return;
     final outgoing = _active;
     _activeIndex = 1 - _activeIndex;
     _index++;
@@ -385,16 +397,49 @@ class MixEngine extends PlaybackController {
   }
 
   @override
+  bool get canMixNow =>
+      _beatSense && _prepared && _plan != null && !_mixing && playing;
+
+  @override
+  void mixNow() => _mixSoon();
+
+  /// Moves the prepared blend to the next downbeat; [beats] shortens it
+  /// (a quick DJ transition for Next).
+  void _mixSoon({int? beats}) {
+    final plan = _plan, from = _active.analysis;
+    if (plan == null || from == null || _mixing || !_prepared) return;
+    _plan = _planner.retime(plan, from, _active.seconds + 0.3, beats: beats);
+    _status = BeatSenseStatus(
+      BeatSenseState.ready,
+      plan: _plan,
+      next: _incoming.track,
+    );
+    notifyListeners();
+  }
+
+  @override
   void seek(double fraction) {
     final target = duration.inMicroseconds / 1e6 * fraction.clamp(0.0, 1.0);
     final plan = _plan;
-    if (_mixing) _cancelPlan();
-    if (plan != null && target > plan.exitAt) {
+    final from = _active.analysis;
+    final wasMixing = _mixing;
+    if (wasMixing) {
       _cancelPlan();
+    } else if (plan != null && from != null && target > plan.exitAt - 1) {
+      // Past the mix point: keep the mix, a little after where we land.
+      _plan = _planner.retime(plan, from, target + 2);
+      _status = BeatSenseStatus(
+        BeatSenseState.ready,
+        plan: _plan,
+        next: _incoming.track,
+      );
+      notifyListeners();
     }
     unawaited(
       _active.seek(target).then((_) {
         positionListenable.value = _active.audio.position;
+        // A seek mid-blend drops it; plan a fresh one from here.
+        if (wasMixing) unawaited(_prepareNext());
       }),
     );
   }
@@ -408,6 +453,17 @@ class MixEngine extends PlaybackController {
 
   @override
   void next() {
+    // Like a DJ: with the next song lined up, Next mixes into it on the
+    // next downbeat with a short beat-matched blend instead of cutting.
+    if (canMixNow) {
+      _mixSoon(beats: 8);
+      return;
+    }
+    final plan = _plan;
+    if (_mixing && plan != null) {
+      unawaited(_finishMix(plan));
+      return;
+    }
     if (_index + 1 >= _queue.length) return;
     _index++;
     unawaited(_startCurrent(at: _plan?.entryAt ?? 0));
